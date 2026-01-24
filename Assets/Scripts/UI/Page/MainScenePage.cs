@@ -1,19 +1,17 @@
-﻿using Architecture.GameSound;
+﻿using Architecture;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using Generated;
 using R3;
 using Sirenix.OdinInspector;
 using Tools;
-using UnityEditor.AddressableAssets.Build.BuildPipelineTasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Utilities;
-using UnityEngine.UIElements;
 using VContainer;
 using Button = UnityEngine.UI.Button;
 
-namespace Architecture
+namespace UI
 {
     /// <summary>
     /// 主界面Page
@@ -37,8 +35,6 @@ namespace Architecture
         
         private void Awake()
         {
-            ScopeRef.LifetimeScope.Container.Inject(this);
-            
             //遮挡事件订阅
             _eventBus.Receive<PageHide>().Subscribe((page) =>
             {

@@ -1,7 +1,7 @@
 ﻿using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace Architecture
+namespace UI
 {
     public abstract class BasePage:MonoBehaviour
     {

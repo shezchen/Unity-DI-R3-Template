@@ -1,4 +1,4 @@
-using Architecture.GameSound;
+using Architecture;
 using Sirenix.OdinInspector;
 using VContainer;
 

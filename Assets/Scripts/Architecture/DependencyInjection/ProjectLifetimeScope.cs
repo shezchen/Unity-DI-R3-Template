@@ -1,7 +1,6 @@
-using Architecture.GameSound;
-using Architecture.GameSound.AudioProvider;
-using Architecture.Language;
+using Architecture.AudioProvider;
 using Sirenix.OdinInspector;
+using UI;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -27,8 +26,6 @@ namespace Architecture
         
         protected override void Configure(IContainerBuilder builder)
         {
-            ScopeRef.LifetimeScope = this;//静态入口...
-
             #region 流程控制
 
             builder.RegisterComponent(gameFlowController);

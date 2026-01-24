@@ -3,7 +3,7 @@ using Sirenix.OdinInspector;
 using Tools;
 using UnityEngine;
 
-namespace Architecture
+namespace UI
 {
     [RequireComponent(typeof(CanvasGroup))]
     public class BreathableButtonIndicator : MonoBehaviour

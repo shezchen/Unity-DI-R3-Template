@@ -1,15 +1,11 @@
-using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
-using UnityEngine;
-
-#if UNITY_EDITOR
 using System.IO;
+using Sirenix.OdinInspector;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
-#endif
+using UnityEngine;
 
-namespace Architecture.GameSound
+namespace Architecture
 {
     /// <summary>
     /// Holds the mapping between friendly clip ids and Addressables keys.

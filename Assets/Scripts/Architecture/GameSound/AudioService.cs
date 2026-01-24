@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using Architecture.GameSound.AudioProvider;
+using Architecture.AudioProvider;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
-namespace Architecture.GameSound
+namespace Architecture
 {
     /// <summary>
     /// Addressables-driven audio service. It loads clips on demand, caches handles, and keeps play logic centralized.

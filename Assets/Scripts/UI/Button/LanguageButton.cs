@@ -1,9 +1,9 @@
-﻿using Architecture.Language;
+﻿using Architecture;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using VContainer;
 
-namespace Architecture
+namespace UI
 {
     public class LanguageButton : MonoBehaviour,ISelectHandler
     {

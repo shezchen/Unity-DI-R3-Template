@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Architecture.Language
+namespace Architecture
 {
     [Serializable]
     public enum GameLanguageType

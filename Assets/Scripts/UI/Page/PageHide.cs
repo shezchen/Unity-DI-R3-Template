@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Architecture
+namespace UI
 {
     public record PageHide(Type PageType);
 }

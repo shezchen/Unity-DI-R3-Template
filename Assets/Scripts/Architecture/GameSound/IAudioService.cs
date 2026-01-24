@@ -1,6 +1,6 @@
 using Cysharp.Threading.Tasks;
 
-namespace Architecture.GameSound
+namespace Architecture
 {
     public interface IAudioService
     {

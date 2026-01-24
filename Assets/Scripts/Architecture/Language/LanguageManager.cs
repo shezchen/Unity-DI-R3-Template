@@ -1,12 +1,12 @@
 ﻿using System;
 using Cysharp.Threading.Tasks;
+using R3;
 using UnityEngine;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
 using VContainer;
-using R3;
 
-namespace Architecture.Language
+namespace Architecture
 {
     /// <summary>
     /// 用来切换语言，CurrentLanguage储存现在使用的语言

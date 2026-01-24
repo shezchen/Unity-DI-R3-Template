@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Linq;
-using Architecture.GameSound;
-using Architecture.Language;
 using Cysharp.Threading.Tasks;
+using UI;
 using UnityEngine;
 using VContainer;
 using Object = UnityEngine.Object;

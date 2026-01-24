@@ -1,16 +1,14 @@
-﻿using System;
-using Architecture.Language;
+﻿using Architecture;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
 using TMPro;
 using Tools;
 using UnityEngine;
-using UnityEngine.Assertions;
 using UnityEngine.UI;
 using VContainer;
 
-namespace Architecture
+namespace UI
 {
     /// <summary>
     /// 切换语言会有延迟，所以这里要监听语言切换事件来手动更新UI
@@ -28,8 +26,6 @@ namespace Architecture
         
         private void Awake()
         {
-            ScopeRef.LifetimeScope.Container.Inject(this);
-            
             _canvasGroup = GetComponent<CanvasGroup>();
             _canvasGroup.alpha = 0;
             _eventBus.Receive<LanguageChangeEvent>().Subscribe((type) =>

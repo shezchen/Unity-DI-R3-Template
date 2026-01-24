@@ -1,5 +1,4 @@
-﻿using System;
-using Architecture.GameSound;
+﻿using Architecture;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
@@ -9,7 +8,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
 
-namespace Architecture
+namespace UI
 {
     [RequireComponent(typeof(CanvasGroup),typeof(UIBinder))]
     public class SettingsPage:BasePage
@@ -28,8 +27,6 @@ namespace Architecture
         
         private void Awake()
         {
-            ScopeRef.LifetimeScope.Container.Inject(this);
-            
             _canvasGroup = GetComponent<CanvasGroup>();
             _uiBinder = GetComponent<UIBinder>();
             

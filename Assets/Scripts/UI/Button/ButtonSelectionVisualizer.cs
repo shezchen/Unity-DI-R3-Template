@@ -2,7 +2,7 @@
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Architecture
+namespace UI
 {
     [RequireComponent(typeof(Selectable))]
     public class ButtonSelectionVisualizer : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler

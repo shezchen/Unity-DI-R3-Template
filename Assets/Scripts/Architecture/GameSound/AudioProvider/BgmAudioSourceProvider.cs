@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Architecture.GameSound.AudioProvider
+namespace Architecture.AudioProvider
 {
     public interface IBgmAudioSourceProvider
     {
