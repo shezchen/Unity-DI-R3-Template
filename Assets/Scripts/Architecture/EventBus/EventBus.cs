@@ -61,4 +61,4 @@ namespace Architecture
         }
     }
 }
-//这个EventBus的字典实际上在运行时是只增不减的，如果取消订阅，Subject就是空的，但依然存在于字典中
+//这个EventBus的字典在运行时初始为空，后续在事件被Subscribe时增加subject

@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Architecture
 {
-    public class SaveManager:ManagerNeedInitializeBase
+    public class SaveManager
     {
         [Inject] private IAudioService _audioService;
         
@@ -21,9 +21,8 @@ namespace Architecture
         /// <summary>
         /// 初始化，会设置IsFirstLaunch和CurrentSettingsSave
         /// </summary>
-        public override async UniTask Init()
+        public async UniTask Init()
         {
-            await base.Init();
             IsFirstLaunch = !File.Exists(_settingsSavePath);
             if (IsFirstLaunch)
             {
