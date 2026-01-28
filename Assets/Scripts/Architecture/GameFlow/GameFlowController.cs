@@ -16,6 +16,7 @@ namespace Architecture
 
         private async void Start()
         {
+            // 游戏入口点
             await _languageManager.Init();
             await _dataManager.Init();
             await _uiManager.Init();

@@ -1,4 +1,5 @@
 using Architecture;
+using Architecture.Data;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
@@ -12,6 +13,7 @@ namespace UI
 {
     /// <summary>
     /// 设置页面
+    /// 通过 DataManager 的 public 方法修改设置，设置会自动保存并通知相关模块
     /// </summary>
     [RequireComponent(typeof(CanvasGroup), typeof(UIBinder), typeof(GraphicRaycaster))]
     public class SettingsPage : MonoBehaviour, IBasePage
@@ -22,7 +24,6 @@ namespace UI
         [SerializeField] private TextMeshProUGUI sfxVolume;
 
         [Inject] private DataManager _dataManager;
-        [Inject] private IAudioService _audioService;
         [Inject] private UIManager _uiManager;
 
         private CanvasGroup _canvasGroup;
@@ -46,7 +47,7 @@ namespace UI
             // 分辨率设置
             var resolutionDropdown = _uiBinder.Get<TMP_Dropdown>("Object_Resolution");
             resolutionDropdown.value = resolutionDropdown.options.FindIndex(option =>
-                ("Res_" + option.text) == _dataManager.CurrentSettingsSave.gameResolution.ToString());
+                ("Res_" + option.text) == _dataManager.GameSettings.Resolution.ToString());
             resolutionDropdown.onValueChanged.RemoveAllListeners();
             resolutionDropdown.onValueChanged.AddListener(async (index) =>
             {
@@ -61,17 +62,14 @@ namespace UI
                         int.TryParse(dimensions[1].Trim(), out int height))
                     {
                         Screen.SetResolution(width, height,
-                            _dataManager.CurrentSettingsSave.gameWindow == GameWindow.FullScreenWindow
+                            _dataManager.GameSettings.WindowMode == GameWindow.FullScreenWindow
                                 ? FullScreenMode.FullScreenWindow
                                 : FullScreenMode.Windowed);
-
-                        var currentAspect = (float)width / height;
-                        const float targetAspect = 16f / 9f; // 目标宽高比16:9
 
                         await UniTask.Yield();
                     }
 
-                    _dataManager.CurrentSettingsSave.gameResolution = resText switch
+                    var resolution = resText switch
                     {
                         "1280x720" => GameResolution.Res_1280x720,
                         "1366x768" => GameResolution.Res_1366x768,
@@ -82,52 +80,49 @@ namespace UI
                         "1280x800" => GameResolution.Res_1280x800,
                         "1920x1200" => GameResolution.Res_1920x1200,
                         "2560x1600" => GameResolution.Res_2560x1600,
-                        _ => _dataManager.CurrentSettingsSave.gameResolution
+                        _ => _dataManager.GameSettings.Resolution
                     };
+                    
+                    _dataManager.SetResolution(resolution);
                 }
             });
 
             // 全屏设置
             var fullScreenToggle = _uiBinder.Get<Toggle>("Toggle_FullScreen");
-            fullScreenToggle.isOn = _dataManager.CurrentSettingsSave.gameWindow == GameWindow.FullScreenWindow;
+            fullScreenToggle.isOn = _dataManager.GameSettings.WindowMode == GameWindow.FullScreenWindow;
             fullScreenToggle.onValueChanged.RemoveAllListeners();
             fullScreenToggle.onValueChanged.AddListener((isFullScreen) =>
             {
                 Screen.fullScreenMode = isFullScreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
-                _dataManager.CurrentSettingsSave.gameWindow = isFullScreen
-                    ? GameWindow.FullScreenWindow
-                    : GameWindow.Window;
+                _dataManager.SetWindowMode(isFullScreen ? GameWindow.FullScreenWindow : GameWindow.Window);
             });
 
             // BGM 音量设置
             var bgmSlider = _uiBinder.Get<Slider>("Slider_BGM");
-            bgmSlider.value = _dataManager.CurrentSettingsSave.bgmVolume;
+            bgmSlider.value = _dataManager.GameSettings.BgmVolume;
             bgmVolume.text = Mathf.RoundToInt(bgmSlider.value).ToString();
             bgmSlider.onValueChanged.RemoveAllListeners();
             bgmSlider.onValueChanged.AddListener((value) =>
             {
-                _audioService.SetBgmVolume(value / 100f);
                 bgmVolume.text = Mathf.RoundToInt(value).ToString();
-                _dataManager.CurrentSettingsSave.bgmVolume = Mathf.RoundToInt(value);
+                _dataManager.SetBgmVolume(Mathf.RoundToInt(value));
             });
 
             // SFX 音效设置
             var sfxSlider = _uiBinder.Get<Slider>("Slider_SFX");
-            sfxSlider.value = _dataManager.CurrentSettingsSave.sfxVolume;
+            sfxSlider.value = _dataManager.GameSettings.SfxVolume;
             sfxVolume.text = Mathf.RoundToInt(sfxSlider.value).ToString();
             sfxSlider.onValueChanged.RemoveAllListeners();
             sfxSlider.onValueChanged.AddListener((value) =>
             {
-                _audioService.SetSfxVolume(value / 100f);
                 sfxVolume.text = Mathf.RoundToInt(value).ToString();
-                _dataManager.CurrentSettingsSave.sfxVolume = Mathf.RoundToInt(value);
+                _dataManager.SetSfxVolume(Mathf.RoundToInt(value));
             });
         }
 
         private void OnCloseButtonClicked()
         {
-            // 保存设置并通过页面栈关闭
-            _dataManager.SaveSettings();
+            // 设置已自动保存，直接关闭页面
             _uiManager.PopPage().Forget();
         }
 

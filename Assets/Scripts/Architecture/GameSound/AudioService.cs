@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Architecture.AudioProvider;
+using Architecture.Data;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
+using R3;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -12,6 +14,7 @@ namespace Architecture
     /// <summary>
     /// Addressables-driven audio service. It loads clips on demand, caches handles, and keeps play logic centralized.
     /// Register it as a singleton in VContainer and inject the two AudioSources plus catalog asset.
+    /// 自动订阅 DataManager 的设置变化事件来更新音量。
     /// </summary>
     public sealed class AudioService : IAudioService, IDisposable
     {
@@ -19,18 +22,40 @@ namespace Architecture
         private readonly SfxAudioSourceProvider _sfxProvider;
         private readonly AudioCatalog _catalog;
         private readonly Dictionary<string, AsyncOperationHandle<AudioClip>> _loadedClipHandles = new();
+        private readonly DisposableBag _disposables = new();
 
         private float _bgmVolume = 1f;
         private float _sfxVolume = 1f;
         private string _currentBgmId;
         private Tween _bgmFadeTween;
 
-        public AudioService(AudioCatalog catalog, BgmAudioSourceProvider bgmProvider, SfxAudioSourceProvider sfxProvider)
+        public AudioService(
+            AudioCatalog catalog, 
+            BgmAudioSourceProvider bgmProvider, 
+            SfxAudioSourceProvider sfxProvider,
+            EventBus eventBus)
         {
             _catalog = catalog;
             _bgmProvider = bgmProvider;
             _sfxProvider = sfxProvider;
             _bgmProvider.Source.loop = true;
+            
+            // 订阅设置变化事件，自动应用音量设置
+            eventBus.Receive<SettingsChangedEvent>()
+                .Where(evt => evt.ChangeType is SettingsChangeType.AllSettings 
+                                             or SettingsChangeType.BgmVolume 
+                                             or SettingsChangeType.SfxVolume)
+                .Subscribe(evt => ApplyVolumeSettings(evt.Settings))
+                .AddTo(ref _disposables);
+        }
+        
+        /// <summary>
+        /// 应用音量设置
+        /// </summary>
+        private void ApplyVolumeSettings(GameSettingsRuntime settings)
+        {
+            SetBgmVolume(settings.BgmVolume / 100f);
+            SetSfxVolume(settings.SfxVolume / 100f);
         }
 
         public async UniTask PreloadAllClipsAsync()
@@ -152,6 +177,7 @@ namespace Architecture
         public void Dispose()
         {
             _bgmFadeTween?.Kill();
+            _disposables.Dispose();
 
             foreach (var handle in _loadedClipHandles.Values)
             {

@@ -38,7 +38,7 @@ namespace Architecture
 
             #endregion
 
-            #region 存档系统
+            #region 数据系统
 
             builder.Register<DataManager>(Lifetime.Singleton);
 
