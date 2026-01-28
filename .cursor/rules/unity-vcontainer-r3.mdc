@@ -4,312 +4,112 @@ globs: **/*.cs
 alwaysApply: false
 ---
 
-# Unity DI-R3 模板架构规范
-
-本项目采用VContainer进行依赖注入，R3进行反应式编程的清晰架构模式。
+# Unity DI-R3 架构规范
 
 ## VContainer 依赖注入
 
-### 注册模式
-
-在 `ProjectLifetimeScope.cs` 中注册依赖：
-
+**注册** (在 `ProjectLifetimeScope.cs`):
 ```csharp
-// ✅ 正确 - 单例注册管理器
 builder.Register<UIManager>(Lifetime.Singleton);
-builder.Register<EventBus>(Lifetime.Singleton);
-
-// ✅ 正确 - 组件注册
 builder.RegisterComponent(gameFlowController);
-
-// ✅ 正确 - 接口绑定
 builder.Register<AudioService>(Lifetime.Singleton).As<IAudioService>();
-
-// ✅ 正确 - 实例注册（Provider模式）
-builder.RegisterInstance(new BgmAudioSourceProvider(bgmSource))
-    .As<IBgmAudioSourceProvider>();
+builder.RegisterInstance(new BgmAudioSourceProvider(bgmSource)).As<IBgmAudioSourceProvider>();
 ```
 
-### 注入模式
-
+**注入**:
 ```csharp
-// ✅ 正确 - MonoBehaviour使用 [Inject] 字段注入
-public class GameFlowController : MonoBehaviour
-{
-    [Inject] private UIManager _uiManager;
-    [Inject] private SaveManager _saveManager;
-    [Inject] private EventBus _eventBus;
-}
+// MonoBehaviour: 字段注入
+[Inject] private UIManager _uiManager;
 
-// ✅ 正确 - 非MonoBehaviour使用构造函数注入
-public class AudioService : IAudioService
-{
-    public AudioService(
-        AudioCatalog catalog,
-        BgmAudioSourceProvider bgmProvider,
-        SfxAudioSourceProvider sfxProvider)
-    {
-        _catalog = catalog;
-        _bgmProvider = bgmProvider;
-        _sfxProvider = sfxProvider;
-    }
-}
+// 非MonoBehaviour: 构造函数注入
+public AudioService(AudioCatalog catalog, IBgmAudioSourceProvider bgmProvider) { }
 
-// ❌ 错误 - 不要使用 FindObjectOfType 或 GetComponent 获取已注入的依赖
-// 应该使用 [Inject] 注入
+// ❌ 不要使用 FindObjectOfType 获取已注入的依赖
 ```
 
 ## R3 事件系统
 
-### 事件定义
-
+**定义**: 使用 `record` 定义事件
 ```csharp
-// ✅ 正确 - 使用 record 定义事件类型
 public record LanguageConfirmEvent(GameLanguageType ConfirmedLanguage);
-public record PlayerDamagedEvent(int Damage, Vector3 Position);
-
-// ❌ 错误 - 不要用 class 定义简单事件
-public class MyEvent { public int Value; }
 ```
 
-### 发布事件
-
+**发布**: 通过注入的 `EventBus`
 ```csharp
-// ✅ 正确 - 通过注入的 EventBus 发布事件
-[Inject] private EventBus _eventBus;
-
 _eventBus.Publish(new LanguageConfirmEvent(selectedLanguage));
 ```
 
-### 订阅事件
-
+**订阅**: 必须绑定生命周期避免泄漏
 ```csharp
-// ✅ 正确 - 在 Init/Start 中订阅，使用 AddTo 绑定生命周期
-public override async UniTask Init()
-{
-    _eventBus.Receive<LanguageConfirmEvent>()
-        .Subscribe(evt => HandleLanguageChange(evt.ConfirmedLanguage))
-        .AddTo(this); // 绑定到 MonoBehaviour 生命周期
-}
+// MonoBehaviour
+_eventBus.Receive<LanguageConfirmEvent>()
+    .Subscribe(evt => Handle(evt))
+    .AddTo(this);
 
-// ✅ 正确 - 非MonoBehaviour使用 DisposableBag
+// 非MonoBehaviour
 private readonly DisposableBag _disposables = new();
-
-public void Initialize()
-{
-    _eventBus.Receive<GameEvent>()
-        .Subscribe(HandleEvent)
-        .AddTo(_disposables);
-}
-
-// ❌ 错误 - 不要忘记绑定生命周期就订阅（会导致内存泄漏）
-_eventBus.Receive<SomeEvent>().Subscribe(HandleEvent);
+_eventBus.Receive<GameEvent>().Subscribe(Handle).AddTo(_disposables);
 ```
 
 ## UniTask 异步操作
 
-### 异步方法模式
-
 ```csharp
-// ✅ 正确 - Unity异步操作使用 UniTask
+// ✅ 使用 UniTask
 public async UniTask Init()
 {
-    await _languageManager.Init();
-    await _saveManager.Init();
-    await _uiManager.Init();
+    await _manager.Init();
 }
 
-// ✅ 正确 - 需要"发射后不管"时使用 .Forget()
-SetToLanguage(language.ConfirmedLanguage).Forget();
+// ✅ 发射后不管
+DoSomethingAsync().Forget();
 
-// ✅ 正确 - Addressables 使用 async/await
-var clip = await LoadClipAsync(clipId, addressKey);
-
-// ❌ 错误 - Unity操作不要使用 Task
-public async Task LoadData() // 应该用 UniTask
-```
-
-## UI页面模式
-
-### UIManager 使用
-
-```csharp
-// ✅ 正确 - 使用 UIManager 显示页面
-await _uiManager.ShowLanguagePage();
-await _uiManager.ShowMainScenePage();
-
-// ✅ 正确 - 动态预加载UI资源
-_uiManager.RefreshPreloadedUI(new List<string> 
-{
-    AddressableKeys.Assets.MainScenePrefab,
-    AddressableKeys.Assets.SettingsPagePrefab
-});
+// ❌ 不要使用 Task（应该用 UniTask）
 ```
 
 ## Addressables 资源管理
 
-### 加载模式
-
+**核心模式**: 缓存句柄 + Dispose 释放
 ```csharp
-// ✅ 正确 - 缓存句柄并在 Dispose 时释放
-private readonly Dictionary<string, AsyncOperationHandle<AudioClip>> _loadedClipHandles = new();
+private readonly Dictionary<string, AsyncOperationHandle<T>> _handles = new();
 
-private async UniTask<AudioClip> LoadClipAsync(string clipId, string addressKey)
+private async UniTask<T> LoadAsync(string key)
 {
-    if (_loadedClipHandles.TryGetValue(clipId, out var cachedHandle))
-    {
-        return cachedHandle.Result;
-    }
-
-    var handle = Addressables.LoadAssetAsync<AudioClip>(addressKey);
-    _loadedClipHandles[clipId] = handle;
+    if (_handles.TryGetValue(key, out var cached)) return cached.Result;
+    
+    var handle = Addressables.LoadAssetAsync<T>(key);
+    _handles[key] = handle;
     return await handle.Task.AsUniTask();
 }
 
 public void Dispose()
 {
-    foreach (var handle in _loadedClipHandles.Values)
-    {
-        if (handle.IsValid())
-        {
-            Addressables.Release(handle);
-        }
-    }
-    _loadedClipHandles.Clear();
+    foreach (var handle in _handles.Values)
+        if (handle.IsValid()) Addressables.Release(handle);
+    _handles.Clear();
 }
-
-// ❌ 错误 - 不要忘记释放 Addressable 句柄
 ```
 
-## 状态机模式
+## 状态机
 
 ```csharp
-// ✅ 正确 - 使用泛型 StateMachine 处理复杂状态逻辑
-private StateMachine<GameState> _stateMachine;
-
-_stateMachine = new StateMachine<GameState>(GameState.Menu);
+private StateMachine<GameState> _stateMachine = new(GameState.Menu);
 
 _stateMachine.Register(GameState.Playing,
     onEnter: () => StartGame(),
-    onExit: () => CleanupGame(),
-    onEnterAsync: async () => await LoadGameDataAsync(),
-    onExitAsync: async () => await SaveGameDataAsync()
-);
+    onEnterAsync: async () => await LoadDataAsync());
 
 await _stateMachine.ChangeStateAsync(GameState.Playing);
 ```
 
-## 音频服务模式
+## 命名约定
 
-```csharp
-// ✅ 正确 - 使用 IAudioService 接口
-[Inject] private IAudioService _audioService;
+- 私有字段: `_camelCase` 
+- 公共属性/方法: `PascalCase`
+- 事件类型: `PascalCase` + `Event` 后缀
 
-// 背景音乐（带淡入淡出）
-await _audioService.PlayBgmAsync("menu_theme", fadeDuration: 1.0f);
-await _audioService.StopBgmAsync(fadeDuration: 0.5f);
+## 项目特定
 
-// 音效
-await _audioService.PlaySfxAsync("button_click", volumeScale: 0.8f);
-
-// 音量控制（0-1归一化）
-_audioService.SetBgmVolume(0.7f);
-_audioService.SetSfxVolume(0.9f);
-```
-
-## 存档系统模式
-
-```csharp
-// ✅ 正确 - 使用 SaveManager 进行持久化
-[Inject] private SaveManager _saveManager;
-
-// 检查是否首次启动
-if (_saveManager.IsFirstLaunch)
-{
-    await ShowTutorial();
-}
-
-// 访问当前设置
-var bgmVolume = _saveManager.CurrentSettingsSave.bgmVolume;
-
-// 保存设置
-_saveManager.CurrentSettingsSave.bgmVolume = 80;
-_saveManager.SaveSettings();
-
-// 保存/加载游戏状态
-var savePath = _saveManager.GetDefaultSavePath(slotIndex);
-_saveManager.SaveGame(savePath);
-_saveManager.LoadGame(savePath);
-```
-
-## 通用最佳实践
-
-### 命名约定
-
-- 私有字段：`_camelCase` 带下划线前缀
-- 公共属性：`PascalCase`
-- 方法：`PascalCase`
-- 常量：`PascalCase` 或 `UPPER_CASE`
-- 事件类型：`PascalCase` 加 `Event` 后缀
-
-### 代码组织
-
-```csharp
-// ✅ 正确 - ProjectLifetimeScope中按类别分组注册
-#region 流程控制
-builder.RegisterComponent(gameFlowController);
-#endregion
-
-#region 事件总线
-builder.Register<EventBus>(Lifetime.Singleton);
-#endregion
-```
-
-### Dispose 模式
-
-```csharp
-// ✅ 正确 - 有资源的管理器实现 IDisposable
-public class AudioService : IAudioService, IDisposable
-{
-    public void Dispose()
-    {
-        _bgmFadeTween?.Kill();
-        // 释放所有句柄
-        foreach (var handle in _loadedClipHandles.Values)
-        {
-            if (handle.IsValid())
-            {
-                Addressables.Release(handle);
-            }
-        }
-        _loadedClipHandles.Clear();
-    }
-}
-```
-
-## 项目特定注意事项
-
-### 生成代码
-
-- `AddressableKeys.cs` 和 `AudioClipName.cs` 是自动生成的代码
-- 不要手动编辑 `Assets/Scripts/Generated/` 目录下的文件
-- 使用生成的常量引用资源：`AddressableKeys.Assets.MainScenePrefab`
-
-### Odin Inspector
-
-项目使用 Odin Inspector 增强编辑器体验：
-- 使用 `[BoxGroup]` 和 `[LabelText]` 组织Inspector面板
-- 使用 `[ShowInInspector, ReadOnly]` 调试运行时状态
-
-### 多语言支持
-
-```csharp
-// 使用 Unity Localization 系统
-// 通过 LanguageManager 切换语言
-await _languageManager.SetToLanguage(GameLanguageType.Chinese);
-
-// 订阅语言变更事件
-_eventBus.Receive<LanguageConfirmEvent>()
-    .Subscribe(evt => OnLanguageChanged(evt.ConfirmedLanguage))
-    .AddTo(this);
-```
+- 生成代码 (`AddressableKeys.cs`, `AudioClipName.cs`) 不要手动编辑
+- 使用 Odin Inspector 特性: `[BoxGroup]`, `[LabelText]`, `[ShowInInspector, ReadOnly]`
+- 使用基于`record`的强类型事件总线`EventBus`
+- 需要在依赖注入式创建`GameObject`时，使用`_resolver.Instantiate()`而不是`UnityEngine.Object.Instantiate()`
