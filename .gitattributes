@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+"Assets/Font/TMP Font/NotoSansSC-Regular SDF.asset" filter=lfs diff=lfs merge=lfs -text
+"Assets/Font/TMP Font/NotoSansJP-Regular SDF.asset" filter=lfs diff=lfs merge=lfs -text
