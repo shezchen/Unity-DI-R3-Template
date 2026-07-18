@@ -1,5 +1,6 @@
+using System.Threading;
 using Architecture;
-using Architecture.Data;
+using Architecture.Data.Settings;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
@@ -13,7 +14,7 @@ namespace UI
 {
     /// <summary>
     /// 设置页面
-    /// 通过 DataManager 的 public 方法修改设置，设置会自动保存并通知相关模块
+    /// Renders an immutable settings snapshot and sends controlled updates to ISettingsService.
     /// </summary>
     [RequireComponent(typeof(CanvasGroup), typeof(UIBinder), typeof(GraphicRaycaster))]
     public class SettingsPage : MonoBehaviour, IBasePage
@@ -23,8 +24,8 @@ namespace UI
         [SerializeField] private TextMeshProUGUI bgmVolume;
         [SerializeField] private TextMeshProUGUI sfxVolume;
 
-        [Inject] private DataManager _dataManager;
-        [Inject] private UIManager _uiManager;
+        [Inject] private ISettingsService _settings;
+        [Inject] private IPageNavigator _navigator;
 
         private CanvasGroup _canvasGroup;
         private UIBinder _uiBinder;
@@ -41,34 +42,20 @@ namespace UI
             var finishButton = _uiBinder.Get<Button>("Button_FinishSettings");
             finishButton.OnClickAsObservable().Subscribe((_) =>
             {
-                OnCloseButtonClicked();
+                CloseAsync().ForgetLogged("[SettingsPage] Close boundary");
             }).AddTo(this);
 
             // 分辨率设置
             var resolutionDropdown = _uiBinder.Get<TMP_Dropdown>("Object_Resolution");
             resolutionDropdown.value = resolutionDropdown.options.FindIndex(option =>
-                ("Res_" + option.text) == _dataManager.GameSettings.Resolution.ToString());
+                ("Res_" + option.text) == _settings.Current.Resolution.ToString());
             resolutionDropdown.onValueChanged.RemoveAllListeners();
-            resolutionDropdown.onValueChanged.AddListener(async (index) =>
+            resolutionDropdown.onValueChanged.AddListener((index) =>
             {
                 var options = resolutionDropdown.options;
                 if (index >= 0 && index < options.Count)
                 {
                     var resText = options[index].text;
-
-                    var dimensions = resText.Split('x');
-                    if (dimensions.Length == 2 &&
-                        int.TryParse(dimensions[0].Trim(), out int width) &&
-                        int.TryParse(dimensions[1].Trim(), out int height))
-                    {
-                        Screen.SetResolution(width, height,
-                            _dataManager.GameSettings.WindowMode == GameWindow.FullScreenWindow
-                                ? FullScreenMode.FullScreenWindow
-                                : FullScreenMode.Windowed);
-
-                        await UniTask.Yield();
-                    }
-
                     var resolution = resText switch
                     {
                         "1280x720" => GameResolution.Res_1280x720,
@@ -80,76 +67,80 @@ namespace UI
                         "1280x800" => GameResolution.Res_1280x800,
                         "1920x1200" => GameResolution.Res_1920x1200,
                         "2560x1600" => GameResolution.Res_2560x1600,
-                        _ => _dataManager.GameSettings.Resolution
+                        _ => _settings.Current.Resolution
                     };
-                    
-                    _dataManager.SetResolution(resolution);
+
+                    _settings.SetResolution(resolution);
                 }
             });
 
             // 全屏设置
             var fullScreenToggle = _uiBinder.Get<Toggle>("Toggle_FullScreen");
-            fullScreenToggle.isOn = _dataManager.GameSettings.WindowMode == GameWindow.FullScreenWindow;
+            fullScreenToggle.isOn = _settings.Current.WindowMode == GameWindow.FullScreenWindow;
             fullScreenToggle.onValueChanged.RemoveAllListeners();
             fullScreenToggle.onValueChanged.AddListener((isFullScreen) =>
             {
-                Screen.fullScreenMode = isFullScreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
-                _dataManager.SetWindowMode(isFullScreen ? GameWindow.FullScreenWindow : GameWindow.Window);
+                _settings.SetWindowMode(isFullScreen ? GameWindow.FullScreenWindow : GameWindow.Window);
             });
 
             // BGM 音量设置
             var bgmSlider = _uiBinder.Get<Slider>("Slider_BGM");
-            bgmSlider.value = _dataManager.GameSettings.BgmVolume;
+            bgmSlider.value = _settings.Current.MusicVolume;
             bgmVolume.text = Mathf.RoundToInt(bgmSlider.value).ToString();
             bgmSlider.onValueChanged.RemoveAllListeners();
             bgmSlider.onValueChanged.AddListener((value) =>
             {
                 bgmVolume.text = Mathf.RoundToInt(value).ToString();
-                _dataManager.SetBgmVolume(Mathf.RoundToInt(value));
+                _settings.SetMusicVolume(Mathf.RoundToInt(value));
             });
 
             // SFX 音效设置
             var sfxSlider = _uiBinder.Get<Slider>("Slider_SFX");
-            sfxSlider.value = _dataManager.GameSettings.SfxVolume;
+            sfxSlider.value = _settings.Current.SfxVolume;
             sfxVolume.text = Mathf.RoundToInt(sfxSlider.value).ToString();
             sfxSlider.onValueChanged.RemoveAllListeners();
             sfxSlider.onValueChanged.AddListener((value) =>
             {
                 sfxVolume.text = Mathf.RoundToInt(value).ToString();
-                _dataManager.SetSfxVolume(Mathf.RoundToInt(value));
+                _settings.SetSfxVolume(Mathf.RoundToInt(value));
             });
         }
 
-        private void OnCloseButtonClicked()
+        private async UniTask CloseAsync()
         {
-            // 设置已自动保存，直接关闭页面
-            _uiManager.PopPage().Forget();
+            var result = await _navigator.PopAsync(this.GetCancellationTokenOnDestroy());
+            if (!result.IsSuccess)
+            {
+                Debug.LogError($"[SettingsPage] Close failed: {result.Status}. {result.Error}");
+            }
         }
 
         #region IBasePage 实现
 
-        public async UniTask OnEnter()
+        public async UniTask OnEnter(CancellationToken cancellationToken)
         {
             if (_raycaster != null) _raycaster.enabled = true;
-            await _canvasGroup.FadeIn(fadeDuration).AsyncWaitForCompletion();
+            await _canvasGroup.FadeIn(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
         }
 
-        public async UniTask OnPause()
+        public async UniTask OnPause(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_raycaster != null) _raycaster.enabled = false;
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnResume()
+        public async UniTask OnResume(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_raycaster != null) _raycaster.enabled = true;
             // 刷新设置数据（如果需要）
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnExit()
+        public async UniTask OnExit(CancellationToken cancellationToken)
         {
-            await _canvasGroup.FadeOut(fadeDuration).AsyncWaitForCompletion();
+            await _canvasGroup.FadeOut(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
         }
 
         #endregion

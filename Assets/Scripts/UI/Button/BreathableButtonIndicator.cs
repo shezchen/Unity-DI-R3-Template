@@ -1,5 +1,4 @@
 ﻿using DG.Tweening;
-using Sirenix.OdinInspector;
 using Tools;
 using UnityEngine;
 
@@ -8,7 +7,7 @@ namespace UI
     [RequireComponent(typeof(CanvasGroup))]
     public class BreathableButtonIndicator : MonoBehaviour
     {
-        [Title("Breath Settings")]
+        [Header("Breath Settings")]
         [SerializeField]
         private bool canBreathe = true;
         
@@ -59,7 +58,6 @@ namespace UI
             // Kill any existing tween to be safe
             StopBreathing();
 
-            // Use the extension method from DOTweenTool
             _breathTween = _canvasGroup.Breath(
                 minAlpha, 
                 maxAlpha, 
@@ -85,10 +83,5 @@ namespace UI
             }
         }
 
-        [Button("Test Start"), DisableInEditorMode]
-        private void TestStart() => StartBreathing();
-
-        [Button("Test Stop"), DisableInEditorMode]
-        private void TestStop() => StopBreathing();
     }
 }

@@ -1,19 +1,16 @@
-﻿using Architecture;
+using System;
+using Architecture;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using VContainer;
 
 namespace UI
 {
-    public class LanguageButton : MonoBehaviour,ISelectHandler
+    public sealed class LanguageButton : MonoBehaviour, ISelectHandler
     {
         [SerializeField] private GameLanguageType languageType;
-        
-        [Inject] private EventBus _eventBus;
-        
-        public void OnSelect(BaseEventData eventData)
-        {
-            _eventBus.Publish<LanguageChangeEvent>(new LanguageChangeEvent(languageType));
-        }
+
+        public event Action<GameLanguageType> Selected;
+
+        public void OnSelect(BaseEventData eventData) => Selected?.Invoke(languageType);
     }
 }

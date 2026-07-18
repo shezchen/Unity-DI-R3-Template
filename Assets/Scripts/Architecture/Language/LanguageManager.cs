@@ -1,110 +1,139 @@
-﻿using System;
+using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
-using R3;
-using UnityEngine;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
-using VContainer;
 
 namespace Architecture
 {
     /// <summary>
-    /// 用来切换语言，CurrentLanguage储存现在使用的语言
+    /// Unity Localization adapter. Owns only the currently applied locale state.
     /// </summary>
-    public class LanguageManager
+    public sealed class LanguageManager : ILanguageService
     {
-        [Inject] private EventBus _eventBus;
-        
-        public static GameLanguageType CurrentLanguage { get; private set; } = GameLanguageType.English;
-        private bool _isInitialized = false;
-        
         private const string CodeEn = "en";
         private const string CodeZh = "zh-Hans";
         private const string CodeJa = "ja";
-        
-        /// <summary>
-        /// 游戏开始时需要使用此方法初始化LanguageManager
-        /// </summary>
-        public async UniTask Init()
-        {
-            Debug.Log("LanguageManager启动");
-            await StartInitialize();
 
-            _eventBus.Receive<LanguageConfirmEvent>().Subscribe(language =>
+        public bool IsInitialized { get; private set; }
+        public GameLanguageType CurrentLanguage { get; private set; } = GameLanguageType.English;
+
+        public async UniTask<LanguageOperationResult> InitializeAsync(
+            CancellationToken cancellationToken = default)
+        {
+            if (IsInitialized)
             {
-                SetToLanguage(language.ConfirmedLanguage).Forget();
-            });
-        }
+                return LanguageOperationResult.Success();
+            }
 
-        private async UniTask StartInitialize()
-        {
             try
             {
-                if (_isInitialized)
-                    return;
-                // 等待 Localization Settings 初始化完成
-                await LocalizationSettings.InitializationOperation.Task;
-                switch (LocalizationSettings.SelectedLocale.Identifier.Code)
+                await LocalizationSettings.InitializationOperation.ToUniTask(
+                    cancellationToken: cancellationToken);
+                var selectedLocale = LocalizationSettings.SelectedLocale;
+                if (selectedLocale == null || !TryGetLanguage(selectedLocale.Identifier.Code, out var language))
                 {
-                    case CodeEn:
-                        CurrentLanguage = GameLanguageType.English;
-                        break;
-                    case CodeZh:
-                        CurrentLanguage = GameLanguageType.Chinese;
-                        break;
-                    case CodeJa:
-                        CurrentLanguage = GameLanguageType.Japanese;
-                        break;
+                    return LanguageOperationResult.Failure(
+                        LanguageOperationStatus.InitializationFailed,
+                        $"Selected locale '{selectedLocale?.Identifier.Code ?? "null"}' is unsupported.");
                 }
-                _isInitialized = true;
+
+                CurrentLanguage = language;
+                IsInitialized = true;
+                return LanguageOperationResult.Success();
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                Debug.LogError("语言管理服务异常："+e.Message);
+                if (exception is OperationCanceledException)
+                {
+                    throw;
+                }
+
+                return LanguageOperationResult.Failure(
+                    LanguageOperationStatus.InitializationFailed,
+                    exception.Message);
             }
         }
-        
-        public async UniTask SetToLanguage(GameLanguageType type)
+
+        public async UniTask<LanguageOperationResult> SetLanguageAsync(
+            GameLanguageType language,
+            CancellationToken cancellationToken = default)
         {
+            if (!IsInitialized)
+            {
+                return LanguageOperationResult.Failure(
+                    LanguageOperationStatus.NotInitialized,
+                    "Language service has not been initialized.");
+            }
+
+            if (!TryGetLocaleCode(language, out var code))
+            {
+                return LanguageOperationResult.Failure(
+                    LanguageOperationStatus.UnsupportedLanguage,
+                    $"Language '{language}' is unsupported.");
+            }
+
+            if (CurrentLanguage == language)
+            {
+                return LanguageOperationResult.Success();
+            }
+
             try
             {
-                switch (type)
+                Locale targetLocale = LocalizationSettings.AvailableLocales.GetLocale(code);
+                if (targetLocale == null)
                 {
-                    case GameLanguageType.Chinese:
-                        await ChangeLocaleByIdentifier(CodeZh);
-                        break;
-                    case GameLanguageType.English:
-                        await ChangeLocaleByIdentifier(CodeEn);
-                        break;
-                    case GameLanguageType.Japanese:
-                        await ChangeLocaleByIdentifier(CodeJa);
-                        break;
+                    return LanguageOperationResult.Failure(
+                        LanguageOperationStatus.LocaleMissing,
+                        $"Locale '{code}' is not configured.");
                 }
-                CurrentLanguage = type;
-            }
-            catch (Exception e)
-            {
-                Debug.LogException(e);
-            }
-            
-        }
 
-
-        /// <summary>
-        /// 通过语言代码（例如 "en", "zh-Hans"）来切换语言
-        /// </summary>
-        /// <param name="code">语言代码</param>
-        private async UniTask ChangeLocaleByIdentifier(string code)
-        {
-            Locale targetLocale = LocalizationSettings.AvailableLocales.GetLocale(code);
-            if (targetLocale != null)
-            {
                 LocalizationSettings.SelectedLocale = targetLocale;
-                await LocalizationSettings.InitializationOperation.ToUniTask(); 
+                await UniTask.Yield(cancellationToken);
+                CurrentLanguage = language;
+                return LanguageOperationResult.Success();
             }
-            else
+            catch (Exception exception)
             {
-                Debug.LogWarning($"未找到语言代码为 '{code}' 的 Locale。");
+                if (exception is OperationCanceledException)
+                {
+                    throw;
+                }
+
+                return LanguageOperationResult.Failure(
+                    LanguageOperationStatus.ChangeFailed,
+                    exception.Message);
+            }
+        }
+
+        private static bool TryGetLocaleCode(GameLanguageType language, out string code)
+        {
+            code = language switch
+            {
+                GameLanguageType.Chinese => CodeZh,
+                GameLanguageType.English => CodeEn,
+                GameLanguageType.Japanese => CodeJa,
+                _ => null
+            };
+            return code != null;
+        }
+
+        private static bool TryGetLanguage(string code, out GameLanguageType language)
+        {
+            switch (code)
+            {
+                case CodeZh:
+                    language = GameLanguageType.Chinese;
+                    return true;
+                case CodeEn:
+                    language = GameLanguageType.English;
+                    return true;
+                case CodeJa:
+                    language = GameLanguageType.Japanese;
+                    return true;
+                default:
+                    language = default;
+                    return false;
             }
         }
     }

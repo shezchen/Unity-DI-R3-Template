@@ -1,140 +1,123 @@
+using System;
 using System.Collections.Generic;
-using System.IO;
-using Sirenix.OdinInspector;
-using UnityEditor;
-using UnityEditor.AddressableAssets;
+using Architecture.Audio;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 
 namespace Architecture
 {
+    [Serializable]
+    public sealed class AudioClipReference : AssetReferenceT<AudioClip>
+    {
+        public AudioClipReference(string guid) : base(guid)
+        {
+        }
+    }
+
+    [Serializable]
+    public sealed class AudioCueDefinition
+    {
+        [SerializeField] private string _id;
+        [SerializeField] private AudioClipReference _clipReference;
+        [SerializeField, Min(0f)] private float _defaultGain = 1f;
+
+        public string Id => _id;
+        public AudioClipReference ClipReference => _clipReference;
+        public float DefaultGain => _defaultGain;
+
+        internal AudioCueDefinition(string id, string assetGuid, float defaultGain = 1f)
+        {
+            _id = id;
+            _clipReference = new AudioClipReference(assetGuid);
+            _defaultGain = Mathf.Max(0f, defaultGain);
+        }
+    }
+
     /// <summary>
-    /// Holds the mapping between friendly clip ids and Addressables keys.
-    /// Keeps data pure so the runtime service can stay completely stateless regarding authoring.
+    /// Runtime-only mapping from typed cue IDs to Addressable AudioClip references.
+    /// Authoring and code generation live in Assets/Editor/Audio.
     /// </summary>
     [CreateAssetMenu(menuName = "16Party/Audio/Audio Catalog", fileName = "AudioCatalog")]
-    public sealed class AudioCatalog : SerializedScriptableObject
+    public sealed class AudioCatalog : ScriptableObject
     {
-        [Title("Audio Configuration")]
-        [DictionaryDrawerSettings(KeyLabel = "Clip Name (ID)", ValueLabel = "Addressable Key")]
-        [SerializeField] 
-        private Dictionary<string, string> _bgmDict = new Dictionary<string, string>();
+        [SerializeField] private List<AudioCueDefinition> _music = new();
+        [SerializeField] private List<AudioCueDefinition> _sfx = new();
 
-        [DictionaryDrawerSettings(KeyLabel = "Clip Name (ID)", ValueLabel = "Addressable Key")]
-        [SerializeField] 
-        private Dictionary<string, string> _sfxDict = new Dictionary<string, string>();
+        private readonly Dictionary<MusicCueId, AudioCueDefinition> _musicIndex = new();
+        private readonly Dictionary<SfxCueId, AudioCueDefinition> _sfxIndex = new();
+        private bool _isIndexBuilt;
 
-        // Public Accessors
-        public IReadOnlyDictionary<string, string> BGM => _bgmDict;
-        public IReadOnlyDictionary<string, string> SFX => _sfxDict;
+        public IReadOnlyList<AudioCueDefinition> Music => _music;
+        public IReadOnlyList<AudioCueDefinition> Sfx => _sfx;
 
-        public bool TryGetBGM(string id, out string addressKey) => _bgmDict.TryGetValue(id, out addressKey);
-        public bool TryGetSFX(string id, out string addressKey) => _sfxDict.TryGetValue(id, out addressKey);
-
-#if UNITY_EDITOR
-        [Button("Auto Generate Index", ButtonSizes.Large), GUIColor(0, 1, 0)]
-        private void GenerateIndex()
+        public bool TryGet(MusicCueId cueId, out AudioCueDefinition definition)
         {
-            _bgmDict.Clear();
-            _sfxDict.Clear();
-
-            var settings = AddressableAssetSettingsDefaultObject.Settings;
-            if (settings == null)
-            {
-                Debug.LogError("[AudioCatalog] Addressable Asset Settings not found! Please create them first.");
-                return;
-            }
-
-            ScanFolder("Assets/Audio/BGM", _bgmDict, settings);
-            ScanFolder("Assets/Audio/SFX", _sfxDict, settings);
-            
-            GenerateConstantsFile();
-            
-            EditorUtility.SetDirty(this);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+            EnsureIndex();
+            return _musicIndex.TryGetValue(cueId, out definition);
         }
 
-        private void GenerateConstantsFile()
+        public bool TryGet(SfxCueId cueId, out AudioCueDefinition definition)
         {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("namespace Generated");
-            sb.AppendLine("{");
-            sb.AppendLine("    public static class AudioClipName");
-            sb.AppendLine("    {");
-
-            void WriteClass(string className, Dictionary<string, string> dict)
-            {
-                sb.AppendLine($"        public static class {className}");
-                sb.AppendLine("        {");
-                
-                var usedNames = new HashSet<string>();
-                foreach (var pair in dict)
-                {
-                    var id = pair.Key;
-                    // Sanitize variable name: replace invalid chars with underscore
-                    var varName = System.Text.RegularExpressions.Regex.Replace(id, @"[^a-zA-Z0-9_]", "_");
-                    
-                    // Ensure valid start char
-                    if (string.IsNullOrEmpty(varName)) varName = "_";
-                    if (char.IsDigit(varName[0])) varName = "_" + varName;
-
-                    if (usedNames.Contains(varName))
-                    {
-                        Debug.LogWarning($"[AudioCatalog] Duplicate const name '{varName}' in {className}. Skipping.");
-                        continue;
-                    }
-                    usedNames.Add(varName);
-
-                    sb.AppendLine($"            public const string {varName} = \"{id}\";");
-                }
-                sb.AppendLine("        }");
-            }
-
-            WriteClass("BGM", _bgmDict);
-            sb.AppendLine();
-            WriteClass("SFX", _sfxDict);
-
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-
-            var filePath = "Assets/Scripts/Generated/AudioClipName.cs";
-            var dir = Path.GetDirectoryName(filePath);
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(filePath, sb.ToString());
+            EnsureIndex();
+            return _sfxIndex.TryGetValue(cueId, out definition);
         }
 
-        private void ScanFolder(string folderPath, Dictionary<string, string> targetDict, UnityEditor.AddressableAssets.Settings.AddressableAssetSettings settings)
+        internal void ReplaceEntries(
+            IEnumerable<AudioCueDefinition> music,
+            IEnumerable<AudioCueDefinition> sfx)
         {
-            if (!Directory.Exists(folderPath))
+            _music.Clear();
+            _sfx.Clear();
+            _music.AddRange(music);
+            _sfx.AddRange(sfx);
+            RebuildIndex();
+        }
+
+        private void OnEnable() => RebuildIndex();
+        private void OnValidate() => RebuildIndex();
+
+        private void EnsureIndex()
+        {
+            if (!_isIndexBuilt)
             {
-                Debug.LogWarning($"[AudioCatalog] Folder not found: {folderPath}");
-                return;
+                RebuildIndex();
             }
+        }
 
-            var guids = AssetDatabase.FindAssets("t:AudioClip", new[] { folderPath });
-            foreach (var guid in guids)
+        private void RebuildIndex()
+        {
+            _musicIndex.Clear();
+            _sfxIndex.Clear();
+            AddEntries(_music, _musicIndex, "Music");
+            AddEntries(_sfx, _sfxIndex, "SFX");
+            _isIndexBuilt = true;
+        }
+
+        private static void AddEntries<TCueId>(
+            IEnumerable<AudioCueDefinition> definitions,
+            IDictionary<TCueId, AudioCueDefinition> index,
+            string category)
+        {
+            foreach (var definition in definitions)
             {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                var entry = settings.FindAssetEntry(guid);
-
-                if (entry == null)
+                if (definition == null || string.IsNullOrWhiteSpace(definition.Id))
                 {
-                    Debug.LogWarning($"[AudioCatalog] Asset not marked as Addressable: {path}");
                     continue;
                 }
 
-                // Use file name (without extension) as ID
-                var id = Path.GetFileNameWithoutExtension(path);
-                
-                if (targetDict.ContainsKey(id))
+                object boxedId = typeof(TCueId) == typeof(MusicCueId)
+                    ? new MusicCueId(definition.Id)
+                    : new SfxCueId(definition.Id);
+                var cueId = (TCueId)boxedId;
+
+                if (index.ContainsKey(cueId))
                 {
-                    Debug.LogWarning($"[AudioCatalog] Duplicate audio ID found: {id} at {path}. Skipped.");
+                    Debug.LogError($"[AudioCatalog] Duplicate {category} cue ID '{definition.Id}'.");
                     continue;
                 }
 
-                targetDict.Add(id, entry.address);
+                index.Add(cueId, definition);
             }
         }
-#endif
     }
 }

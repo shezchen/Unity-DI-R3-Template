@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
 using Architecture;
+using Architecture.Data.Settings;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using Generated;
@@ -11,96 +15,158 @@ using VContainer;
 
 namespace UI
 {
-    /// <summary>
-    /// 语言选择页面
-    /// 切换语言会有延迟，所以这里要监听语言切换事件来手动更新UI
-    /// </summary>
     [RequireComponent(typeof(UIBinder), typeof(CanvasGroup), typeof(GraphicRaycaster))]
-    public class LanguagePage : MonoBehaviour, IBasePage
+    public sealed class LanguagePage : MonoBehaviour, IBasePage
     {
         [SerializeField] private TextMeshProUGUI languageText;
         [SerializeField] private float fadeDuration = 0.5f;
 
-        [Inject] private EventBus _eventBus;
-        [Inject] private UIManager _uiManager;
-        
+        [Inject] private ILanguageService _language;
+        [Inject] private ISettingsService _settings;
+        [Inject] private IPageNavigator _navigator;
+
+        private readonly List<LanguageButton> _languageButtons = new();
         private UIBinder _uiBinder;
         private CanvasGroup _canvasGroup;
         private GraphicRaycaster _raycaster;
+        private bool _isApplying;
 
         private void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();
             _raycaster = GetComponent<GraphicRaycaster>();
-            _canvasGroup.alpha = 0;
-            
-            // 订阅语言变更事件
-            _eventBus.Receive<LanguageChangeEvent>().Subscribe((type) =>
-            {
-                switch (type.NewLanguage)
-                {
-                    case GameLanguageType.Chinese:
-                        languageText.text = "这是正确的语言吗？";
-                        break;
-                    case GameLanguageType.English:
-                        languageText.text = "Is this the correct language?";
-                        break;
-                    case GameLanguageType.Japanese:
-                        languageText.text = "これは正しい言語ですか？";
-                        break;
-                }
-            }).AddTo(this);
-
-            // 绑定按钮事件
             _uiBinder = GetComponent<UIBinder>();
-            _uiBinder.Get<Button>("Button_Chinese").OnClickAsObservable().Subscribe((_) =>
-            {
-                OnLanguageSelected(GameLanguageType.Chinese);
-            }).AddTo(this);
-            _uiBinder.Get<Button>("Button_English").OnClickAsObservable().Subscribe((_) =>
-            {
-                OnLanguageSelected(GameLanguageType.English);
-            }).AddTo(this);
-            _uiBinder.Get<Button>("Button_Japanese").OnClickAsObservable().Subscribe((_) =>
-            {
-                OnLanguageSelected(GameLanguageType.Japanese);
-            }).AddTo(this);
+            _canvasGroup.alpha = 0;
+
+            BindButton("Button_Chinese", GameLanguageType.Chinese);
+            BindButton("Button_English", GameLanguageType.English);
+            BindButton("Button_Japanese", GameLanguageType.Japanese);
+            UpdatePreview(_language.CurrentLanguage);
         }
 
-        private void OnLanguageSelected(GameLanguageType language)
+        private void OnDestroy()
         {
-            _eventBus.Publish(new LanguageConfirmEvent(language));
-            _uiManager.PopPage().ContinueWith(() =>
+            foreach (var languageButton in _languageButtons)
             {
-                _uiManager.PushPage<MainScenePage>(AddressableKeys.Assets.MainScenePrefab).Forget();
-            }).Forget();
+                if (languageButton != null)
+                {
+                    languageButton.Selected -= UpdatePreview;
+                }
+            }
         }
 
-        #region IBasePage 实现
-
-        public async UniTask OnEnter()
+        private void BindButton(string id, GameLanguageType language)
         {
-            if (_raycaster != null) _raycaster.enabled = true;
-            await _canvasGroup.FadeIn(fadeDuration).AsyncWaitForCompletion();
+            var button = _uiBinder.Get<Button>(id);
+            button.OnClickAsObservable()
+                .Subscribe(_ => ApplyLanguageAndContinueAsync(language)
+                    .ForgetLogged("[LanguagePage] Language selection boundary"))
+                .AddTo(this);
+
+            var languageButton = button.GetComponent<LanguageButton>();
+            if (languageButton != null)
+            {
+                languageButton.Selected += UpdatePreview;
+                _languageButtons.Add(languageButton);
+            }
         }
 
-        public async UniTask OnPause()
+        private async UniTask ApplyLanguageAndContinueAsync(GameLanguageType language)
         {
-            if (_raycaster != null) _raycaster.enabled = false;
+            if (_isApplying)
+            {
+                return;
+            }
+
+            _isApplying = true;
+            _raycaster.enabled = false;
+            var previousLanguage = _language.CurrentLanguage;
+
+            try
+            {
+                var cancellationToken = this.GetCancellationTokenOnDestroy();
+                var change = await _language.SetLanguageAsync(language, cancellationToken);
+                if (!change.IsSuccess)
+                {
+                    Debug.LogError($"[LanguagePage] Locale change failed: {change.Status}. {change.Error}");
+                    return;
+                }
+
+                var save = _settings.SetLanguage(language);
+                if (!save.IsSuccess)
+                {
+                    var rollback = await _language.SetLanguageAsync(previousLanguage, cancellationToken);
+                    Debug.LogError(
+                        $"[LanguagePage] Language setting save failed: {save.Error}. " +
+                        $"Locale rollback: {rollback.Status}.");
+                    return;
+                }
+
+                var navigation = await _navigator.ReplaceAsync<MainScenePage>(
+                    AddressableKeys.Assets.MainScenePrefab,
+                    cancellationToken);
+                if (!navigation.IsSuccess)
+                {
+                    Debug.LogError(
+                        $"[LanguagePage] Navigation failed: {navigation.Status}. {navigation.Error}");
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+            finally
+            {
+                _isApplying = false;
+                if (_raycaster != null)
+                {
+                    _raycaster.enabled = true;
+                }
+            }
+        }
+
+        private void UpdatePreview(GameLanguageType language)
+        {
+            languageText.text = language switch
+            {
+                GameLanguageType.Chinese => "这是正确的语言吗？",
+                GameLanguageType.English => "Is this the correct language?",
+                GameLanguageType.Japanese => "これは正しい言語ですか？",
+                _ => languageText.text
+            };
+        }
+
+        public async UniTask OnEnter(CancellationToken cancellationToken)
+        {
+            if (!_isApplying)
+            {
+                _raycaster.enabled = true;
+            }
+
+            await _canvasGroup.FadeIn(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
+        }
+
+        public async UniTask OnPause(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _raycaster.enabled = false;
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnResume()
+        public async UniTask OnResume(CancellationToken cancellationToken)
         {
-            if (_raycaster != null) _raycaster.enabled = true;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_isApplying)
+            {
+                _raycaster.enabled = true;
+            }
+
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnExit()
+        public async UniTask OnExit(CancellationToken cancellationToken)
         {
-            await _canvasGroup.FadeOut(fadeDuration).AsyncWaitForCompletion();
+            await _canvasGroup.FadeOut(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
         }
-
-        #endregion
     }
 }

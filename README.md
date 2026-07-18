@@ -1,187 +1,94 @@
-# Unity DI-R3 Template | Unity DI-R3 游戏模板
+# DI-R3 Template
 
-<div align="center">
+Unity 6 中小型独立游戏模板。项目以 VContainer 作为唯一组合根，以 UniTask 表达可取消的异步流程，以 R3 暴露状态变化，并通过 Addressables 管理 UI 与音频资源。
 
-[![Unity](https://img.shields.io/badge/Unity-2022.3+-black.svg?style=flat&logo=unity)](https://unity.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![VContainer](https://img.shields.io/badge/VContainer-1.17.0-green.svg)](https://github.com/hadashiA/VContainer)
-[![R3](https://img.shields.io/badge/R3-latest-orange.svg)](https://github.com/Cysharp/R3)
+当前编辑器版本：`6000.3.5f2`。
 
-*A modern Unity indie game template featuring clean architecture with dependency injection and reactive programming*
+## 主要能力
 
-*一个现代化的Unity独立游戏模板，采用清晰的架构设计、依赖注入和反应式编程*
+- 显式启动链：设置、本地化、显示/音频应用和首页面路由均可等待、可取消。
+- 设置与存档：不可变设置快照、独立 Repository、schema version、损坏文件回退和原子写入。
+- 本地化：支持 `en`、`zh-Hans`、`ja`，保存 Locale，首次启动才进入语言选择页。
+- UI 导航：串行 Push/Pop/Replace/Clear、失败回滚、页面生命周期 CancellationToken 和 Addressables lease。
+- 音频：Music/SFX 分离接口、Addressable Clip 缓存、latest-command-wins BGM 转场和 AudioMixer 音量。
+- 作者门禁：UIBinder 校验、Audio Catalog freshness、Addressable Keys freshness、Packed Addressables 与 Windows Player 构建入口。
 
-[English](#english) | [简体中文](#简体中文)
+## 运行时结构
 
-</div>
-
----
-
-## English
-
-### ✨ Features
-
-- **🎯 Dependency Injection**: Built on [VContainer](https://github.com/hadashiA/VContainer) for clean, testable code
-- **⚡ Reactive Programming**: Powered by [R3](https://github.com/Cysharp/R3) for elegant event handling
-- **🎵 Audio System**: Complete audio service with BGM/SFX management and fade transitions
-- **💾 Save System**: Flexible save/load system with settings and game state persistence
-- **🌍 Localization**: Multi-language support via Unity Localization
-- **🎨 UI Management**: Page-based UI system with async lifecycle management
-- **📦 Addressables**: Resource management using Unity Addressables
-- **🔄 State Machine**: Generic state machine for complex game flow
-- **🎭 Event Bus**: Type-safe event system with R3 Observables
-
-### 📁 Project Structure
-
-```
+```text
 Assets/Scripts/
-├── Architecture/          # Core systems
-│   ├── DependencyInjection/   # VContainer setup
-│   ├── EventBus/              # R3-based event system
-│   ├── GameFlow/              # Game initialization flow
-│   ├── GameSound/             # Audio service
-│   ├── Language/              # Localization manager
-│   └── Data/                  # Save/load system
-├── UI/                    # UI pages and components
-├── Tools/                 # Utilities (StateMachine, Extensions)
-└── Generated/             # Auto-generated code
+├─ Architecture/
+│  ├─ DependencyInjection/   # ProjectLifetimeScope 组合根
+│  ├─ GameFlow/              # 启动编排
+│  ├─ Data/                  # Settings、GameSave、Persistence
+│  ├─ GameSound/             # Audio contracts、players、output、clip store
+│  └─ Language/              # Localization contracts 与实现
+├─ UI/
+│  ├─ Navigation/            # Navigator、PageStack、Prefab lease
+│  └─ Page/                  # 页面与 UIBinder
+├─ Tools/                    # 有真实调用方的运行时扩展
+└─ Generated/                # 禁止手改的生成常量
 ```
 
-### 🛠️ Core Systems
+`ProjectLifetimeScope` 是默认的唯一组合根。运行时不使用全局 EventBus、Service Locator 或第二套单例系统；需要结果和顺序的操作通过接口直接调用。
 
-#### Dependency Injection (VContainer)
+## 最小用法
+
+页面导航：
+
 ```csharp
-// Register in ProjectLifetimeScope.cs
-builder.Register<UIManager>(Lifetime.Singleton);
-builder.Register<EventBus>(Lifetime.Singleton);
-
-// Inject anywhere
-[Inject] private UIManager _uiManager;
+var result = await navigator.PushAsync<SettingsPage>(
+    AddressableKeys.Assets.SettingsPagePrefab,
+    cancellationToken);
 ```
 
-#### Event System (R3)
+播放音频：
+
 ```csharp
-// Define events as records
-public record PlayerDamagedEvent(int Damage);
-
-// Publish
-_eventBus.Publish(new PlayerDamagedEvent(10));
-
-// Subscribe with lifecycle binding
-_eventBus.Receive<PlayerDamagedEvent>()
-    .Subscribe(evt => HandleDamage(evt.Damage))
-    .AddTo(this);
+await musicPlayer.PlayAsync(new MusicCueId(AudioClipName.BGM.TestBGM));
+await sfxPlayer.PlayAsync(new SfxCueId(AudioClipName.SFX.ClickSound));
 ```
 
-#### Audio Service
+修改设置：
+
 ```csharp
-await _audioService.PlayBgmAsync("menu_theme", fadeDuration: 1.0f);
-await _audioService.PlaySfxAsync("button_click");
+var result = settingsService.SetMusicVolume(80);
+var snapshot = settingsService.Current;
 ```
 
-### 📦 Dependencies
+## Editor 菜单
 
-- **VContainer** 1.17.0 - Dependency Injection
-- **R3** - Reactive Extensions
-- **UniTask** - Async/Await for Unity
-- **DOTween** - Tweening animations
-- **Unity Addressables** - Asset management
-- **Unity Localization** - Multi-language support
-- **Odin Inspector** (Optional) - Enhanced editor
+- `Tools/Template/UI/Validate UIBinders`
+- `Tools/Template/Audio/Validate Catalog Freshness`
+- `Tools/Template/Code Generation/Generate Addressable Keys`
+- `Tools/Template/Code Generation/Validate Addressable Keys`
+- `Tools/Template/Code Generation/Validate Generated Code`
+- `Tools/Template/Build/Packed Addressables`
+- `Tools/Template/Build/Windows Player`
+- `Tools/Template/Build/Packed Addressables + Windows Player`
 
-### 📖 Documentation
+Player Build 前会自动执行 UIBinder、Audio Catalog 与生成文件 freshness 检查。
 
-For detailed architecture patterns and best practices, see `.cursor/rules/unity-vcontainer-r3.mdc`
+## 资源约定
 
-### 🤝 Contributing
+- UI Prefab 由 `IUiPrefabProvider` 加载，并由 `IObjectResolver.Instantiate` 实例化以完成 VContainer 注入。
+- UIBinder 对象使用 `Button_`、`Text_`、`Image_`、`Slider_`、`Toggle_`、`Input_`、`Panel_`、`Object_` 前缀。
+- AudioClip 放入 `Assets/Audio/BGM` 或 `Assets/Audio/SFX`，标记为 Addressable 后再生成 Audio Catalog。
+- `AddressableKeys.cs` 与 `AudioClipName.cs` 是生成文件，不应手工编辑。
 
-Contributions are welcome! Feel free to submit issues and pull requests.
+## Dependencies
 
-### 📄 License
+- VContainer
+- R3
+- UniTask
+- DOTween
+- Unity Addressables
+- Unity Localization
+- Unity Input System
+- URP 2D
 
-This project is licensed under the MIT License.
+第一方运行时代码不依赖 Odin Inspector。当前第一方代码保持在 `Assembly-CSharp`；项目暂不引入模块 asmdef。
 
----
+## Verification
 
-## 简体中文
-
-### ✨ 特性
-
-- **🎯 依赖注入**: 基于 [VContainer](https://github.com/hadashiA/VContainer) 实现清晰、可测试的代码
-- **⚡ 反应式编程**: 使用 [R3](https://github.com/Cysharp/R3) 实现优雅的事件处理
-- **🎵 音频系统**: 完整的音频服务，支持BGM/SFX管理和淡入淡出
-- **💾 存档系统**: 灵活的存档/读档系统，支持设置和游戏状态持久化
-- **🌍 本地化**: 通过Unity Localization实现多语言支持
-- **🎨 UI管理**: 基于页面的UI系统，支持异步生命周期管理
-- **📦 Addressables**: 使用Unity Addressables进行资源管理
-- **🔄 状态机**: 泛型状态机，用于复杂游戏流程
-- **🎭 事件总线**: 类型安全的事件系统，基于R3 Observables
-
-### 📁 项目结构
-
-```
-Assets/Scripts/
-├── Architecture/          # 核心系统
-│   ├── DependencyInjection/   # VContainer配置
-│   ├── EventBus/              # 基于R3的事件系统
-│   ├── GameFlow/              # 游戏初始化流程
-│   ├── GameSound/             # 音频服务
-│   ├── Language/              # 本地化管理器
-│   └── Data/                  # 存档/读档系统
-├── UI/                    # UI页面和组件
-├── Tools/                 # 工具类（状态机、扩展方法）
-└── Generated/             # 自动生成的代码
-```
-
-### 🛠️ 核心系统
-
-#### 依赖注入 (VContainer)
-```csharp
-// 在 ProjectLifetimeScope.cs 中注册
-builder.Register<UIManager>(Lifetime.Singleton);
-builder.Register<EventBus>(Lifetime.Singleton);
-
-// 在任意位置注入
-[Inject] private UIManager _uiManager;
-```
-
-#### 事件系统 (R3)
-```csharp
-// 使用 record 定义事件
-public record PlayerDamagedEvent(int Damage);
-
-// 发布事件
-_eventBus.Publish(new PlayerDamagedEvent(10));
-
-// 订阅事件（绑定生命周期）
-_eventBus.Receive<PlayerDamagedEvent>()
-    .Subscribe(evt => HandleDamage(evt.Damage))
-    .AddTo(this);
-```
-
-#### 音频服务
-```csharp
-await _audioService.PlayBgmAsync("menu_theme", fadeDuration: 1.0f);
-await _audioService.PlaySfxAsync("button_click");
-```
-
-### 📦 依赖项
-
-- **VContainer** 1.17.0 - 依赖注入框架
-- **R3** - 反应式扩展
-- **UniTask** - Unity异步/等待
-- **DOTween** - 补间动画
-- **Unity Addressables** - 资源管理
-- **Unity Localization** - 多语言支持
-- **Odin Inspector**（可选）- 增强编辑器
-
-### 🤝 贡献
-
-欢迎贡献！请随时提交问题和拉取请求。
-
-### 📄 许可证
-
-本项目采用 MIT 许可证。
-
-
-🤔 未来会持续更新，还在想会加什么
+项目只接受 Unity Editor/Player 构建结果作为编译证据，不使用普通 `dotnet build` 验证 Unity 工程。完整手工流程见 [REFACTORING_PLAN.md](REFACTORING_PLAN.md)。

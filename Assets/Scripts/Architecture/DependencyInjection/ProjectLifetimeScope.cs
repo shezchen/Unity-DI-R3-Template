@@ -1,7 +1,11 @@
-using Architecture.AudioProvider;
-using Sirenix.OdinInspector;
+using Architecture.Audio;
+using Architecture.Audio.Internal;
+using Architecture.Data.GameSave;
+using Architecture.Data.Persistence;
+using Architecture.Data.Settings;
 using UI;
 using UnityEngine;
+using UnityEngine.Audio;
 using VContainer;
 using VContainer.Unity;
 
@@ -9,19 +13,31 @@ namespace Architecture
 {
     public class ProjectLifetimeScope : LifetimeScope
     {
-        [BoxGroup("游戏流程管理器"), LabelText("Game Flow Controller"), SerializeField]
+        [Header("游戏流程")]
+        [SerializeField]
         private GameFlowController gameFlowController;
         
-        [BoxGroup("音乐与音效"), LabelText("声音库"), SerializeField]
+        [Header("音乐与音效")]
+        [SerializeField]
         private AudioCatalog audioCatalog;
 
-        [BoxGroup("音乐与音效"), LabelText("BGM播放器"), SerializeField]
+        [SerializeField]
         private AudioSource bgmSource;
 
-        [BoxGroup("音乐与音效"), LabelText("SFX播放器"), SerializeField]
+        [SerializeField]
         private AudioSource sfxSource;
 
-        [BoxGroup("UI"), LabelText("UI Root"), SerializeField]
+        [SerializeField]
+        private AudioMixer audioMixer;
+
+        [SerializeField]
+        private string musicVolumeParameter = "MusicVolume";
+
+        [SerializeField]
+        private string sfxVolumeParameter = "SfxVolume";
+
+        [Header("UI")]
+        [SerializeField]
         private UIRoot uiRoot;
         
         protected override void Configure(IContainerBuilder builder)
@@ -32,39 +48,51 @@ namespace Architecture
 
             #endregion
 
-            #region 事件总线
-
-            builder.Register<EventBus>(Lifetime.Singleton);
-
-            #endregion
-
             #region 数据系统
 
-            builder.Register<DataManager>(Lifetime.Singleton);
+            builder.RegisterInstance(new PersistencePaths(Application.persistentDataPath));
+            builder.Register<PhysicalFileStore>(Lifetime.Singleton).As<IFileStore>();
+            builder.Register<SystemClock>(Lifetime.Singleton).As<IClock>();
+            builder.Register<JsonSettingsRepository>(Lifetime.Singleton).As<ISettingsRepository>();
+            builder.Register<SettingsService>(Lifetime.Singleton).As<ISettingsService>();
+            builder.Register<DisplaySettingsApplier>(Lifetime.Singleton);
+            builder.Register<JsonGameSaveRepository>(Lifetime.Singleton).As<IGameSaveRepository>();
+            builder.Register<GameSaveService>(Lifetime.Singleton).As<IGameSaveService>();
 
             #endregion
 
             #region 声音相关服务
 
             builder.RegisterInstance(audioCatalog);
-            builder.RegisterInstance(new BgmAudioSourceProvider(bgmSource))
-                .As<IBgmAudioSourceProvider>();
-            builder.RegisterInstance(new SfxAudioSourceProvider(sfxSource))
-                .As<ISfxAudioSourceProvider>();
-            builder.Register<AudioService>(Lifetime.Singleton).As<IAudioService>();
+            builder.RegisterInstance(new AudioOutputConfiguration(
+                bgmSource,
+                sfxSource,
+                audioMixer,
+                musicVolumeParameter,
+                sfxVolumeParameter));
+            builder.Register<UnityAudioOutput>(Lifetime.Singleton)
+                .As<IAudioOutput, IAudioLevelsControl, IAudioImmediateControl>();
+            builder.Register<AddressableAudioClipStore>(Lifetime.Singleton)
+                .As<IAudioClipStore>();
+            builder.Register<MusicPlayer>(Lifetime.Singleton).As<IMusicPlayer>();
+            builder.Register<SfxPlayer>(Lifetime.Singleton).As<ISfxPlayer>();
+            builder.Register<AudioSettingsBinding>(Lifetime.Singleton);
 
             #endregion
 
             #region 语言管理
 
-            builder.Register<LanguageManager>(Lifetime.Singleton);
+            builder.Register<LanguageManager>(Lifetime.Singleton).As<ILanguageService>();
+            builder.Register<LocalizationSettingsBinding>(Lifetime.Singleton);
 
             #endregion
 
             #region UI
 
             builder.RegisterComponent(uiRoot);
-            builder.Register<UIManager>(Lifetime.Singleton);
+            builder.Register<AddressableUiPrefabProvider>(Lifetime.Singleton).As<IUiPrefabProvider>();
+            builder.Register<PageStack>(Lifetime.Singleton);
+            builder.Register<PageNavigator>(Lifetime.Singleton).As<IPageNavigator>();
 
             #endregion
 

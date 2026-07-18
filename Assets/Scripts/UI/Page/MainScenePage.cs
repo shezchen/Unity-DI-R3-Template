@@ -1,9 +1,11 @@
+using System;
+using System.Threading;
 using Architecture;
+using Architecture.Audio;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using Generated;
 using R3;
-using Sirenix.OdinInspector;
 using Tools;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -19,29 +21,33 @@ namespace UI
     [RequireComponent(typeof(UIBinder), typeof(GraphicRaycaster))]
     public class MainScenePage : MonoBehaviour, IBasePage
     {
-        [BoxGroup("按任意键"), Header("按任意键"), SerializeField]
+        [Header("按任意键")]
+        [SerializeField]
         private CanvasGroup pressAnyButton;
 
-        [BoxGroup("按任意键"), Header("偏移量"), SerializeField]
+        [SerializeField]
         private Vector2 slideOffset;
 
-        [BoxGroup("按任意键"), Header("滑动时间"), SerializeField]
+        [SerializeField]
         private float slideDuration;
 
-        [BoxGroup("主页面"), Header("主页面"), SerializeField]
+        [Header("主页面")]
+        [SerializeField]
         private CanvasGroup mainSceneContent;
 
-        [BoxGroup("主页面"), Header("主页面出现时间"), SerializeField]
+        [SerializeField]
         private float mainSceneDuration;
 
-        [BoxGroup("主页面"), Header("默认选中按钮"), SerializeField]
+        [SerializeField]
         private Button defaultSelectedButton;
 
-        [Inject] private IAudioService _audioService;
-        [Inject] private UIManager _uiManager;
+        [Inject] private ISfxPlayer _sfxPlayer;
+        [Inject] private IPageNavigator _navigator;
 
         private UIBinder _uiBinder;
         private GraphicRaycaster _raycaster;
+        private IDisposable _anyButtonSubscription;
+        private Tween _transition;
 
         private void Awake()
         {
@@ -51,15 +57,15 @@ namespace UI
             // 绑定设置按钮事件
             _uiBinder.Get<Button>("Button_Settings").OnClickAsObservable().Subscribe((_) =>
             {
-                _audioService.PlaySfxAsync(AudioClipName.SFX.ClickSound);
-                // 使用新的页面栈 API 推入设置页面
-                _uiManager.PushPage<SettingsPage>(AddressableKeys.Assets.SettingsPagePrefab).Forget();
+                _sfxPlayer.PlayAsync(new SfxCueId(AudioClipName.SFX.ClickSound))
+                    .ForgetLogged("[MainScenePage] Settings click SFX boundary");
+                OpenSettingsAsync().ForgetLogged("[MainScenePage] Open settings boundary");
             }).AddTo(this);
         }
 
         #region IBasePage 实现
 
-        public async UniTask OnEnter()
+        public async UniTask OnEnter(CancellationToken cancellationToken)
         {
             if (_raycaster != null) _raycaster.enabled = true;
 
@@ -70,45 +76,49 @@ namespace UI
             pressAnyButton.transform.localPosition -= (Vector3)slideOffset;
             canvasGroup.alpha = 0;
 
-            var seq = DOTween.Sequence();
+            var seq = DOTween.Sequence().SetUpdate(true);
             seq.Append(pressAnyButton.transform.LocalMoveTo(pos, slideDuration));
             seq.Join(canvasGroup.FadeIn(slideDuration));
-            await seq.AsyncWaitForCompletion();
+            await AwaitTransitionAsync(seq, cancellationToken);
 
             // 等待任意按键
-            InputSystem.onAnyButtonPress.CallOnce((_) =>
+            _anyButtonSubscription?.Dispose();
+            _anyButtonSubscription = InputSystem.onAnyButtonPress.CallOnce((_) =>
             {
-                _audioService.PlaySfxAsync(AudioClipName.SFX.ClickSound);
-                var cg = pressAnyButton;
-                var currentPos = pressAnyButton.transform.localPosition;
-                var hideSeq = DOTween.Sequence();
-                hideSeq.Append(pressAnyButton.transform.LocalMoveTo(currentPos + (Vector3)slideOffset, slideDuration));
-                hideSeq.Join(cg.FadeOut(slideDuration));
-                hideSeq.OnComplete(() =>
-                {
-                    pressAnyButton.gameObject.SetActive(false);
-                    ShowMainScene().Forget();
-                });
+                _anyButtonSubscription = null;
+                HandleAnyButtonAsync(this.GetCancellationTokenOnDestroy())
+                    .ForgetLogged("[MainScenePage] Any-button boundary");
             });
         }
 
-        public async UniTask OnPause()
+        public async UniTask OnPause(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            _anyButtonSubscription?.Dispose();
+            _anyButtonSubscription = null;
+            _transition?.Kill();
+            _transition = null;
             if (_raycaster != null) _raycaster.enabled = false;
             gameObject.SetActive(false);
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnResume()
+        public async UniTask OnResume(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             gameObject.SetActive(true);
             if (_raycaster != null) _raycaster.enabled = true;
             defaultSelectedButton.Select();
             await UniTask.CompletedTask;
         }
 
-        public async UniTask OnExit()
+        public async UniTask OnExit(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            _anyButtonSubscription?.Dispose();
+            _anyButtonSubscription = null;
+            _transition?.Kill();
+            _transition = null;
             await UniTask.CompletedTask;
         }
 
@@ -117,21 +127,61 @@ namespace UI
         /// <summary>
         /// 按任意键之后，显示主页面的全部内容
         /// </summary>
-        private async UniTask ShowMainScene()
+        private async UniTask HandleAnyButtonAsync(CancellationToken cancellationToken)
+        {
+            _sfxPlayer.PlayAsync(
+                new SfxCueId(AudioClipName.SFX.ClickSound),
+                cancellationToken: cancellationToken)
+                .ForgetLogged("[MainScenePage] Any-button SFX boundary");
+
+            var currentPos = pressAnyButton.transform.localPosition;
+            var hideSequence = DOTween.Sequence().SetUpdate(true);
+            hideSequence.Append(pressAnyButton.transform.LocalMoveTo(
+                currentPos + (Vector3)slideOffset,
+                slideDuration));
+            hideSequence.Join(pressAnyButton.FadeOut(slideDuration));
+            await AwaitTransitionAsync(hideSequence, cancellationToken);
+
+            pressAnyButton.gameObject.SetActive(false);
+            await ShowMainScene(cancellationToken);
+        }
+
+        private async UniTask ShowMainScene(CancellationToken cancellationToken)
         {
             mainSceneContent.gameObject.SetActive(true);
             mainSceneContent.alpha = 0;
-            await mainSceneContent.FadeIn(mainSceneDuration).AsyncWaitForCompletion();
+            await AwaitTransitionAsync(
+                mainSceneContent.FadeIn(mainSceneDuration),
+                cancellationToken);
             defaultSelectedButton.Select();
         }
 
-        /// <summary>
-        /// 隐藏主页面内容
-        /// </summary>
-        private async UniTask HideMainScene()
+        private async UniTask OpenSettingsAsync()
         {
-            await mainSceneContent.FadeOut(mainSceneDuration).AsyncWaitForCompletion();
-            mainSceneContent.gameObject.SetActive(false);
+            var result = await _navigator.PushAsync<SettingsPage>(
+                AddressableKeys.Assets.SettingsPagePrefab,
+                this.GetCancellationTokenOnDestroy());
+            if (!result.IsSuccess)
+            {
+                Debug.LogError($"[MainScenePage] Open settings failed: {result.Status}. {result.Error}");
+            }
+        }
+
+        private async UniTask AwaitTransitionAsync(Tween tween, CancellationToken cancellationToken)
+        {
+            _transition?.Kill();
+            _transition = tween;
+            try
+            {
+                await tween.ToUniTask(cancellationToken: cancellationToken);
+            }
+            finally
+            {
+                if (ReferenceEquals(_transition, tween))
+                {
+                    _transition = null;
+                }
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace UI
@@ -14,7 +13,7 @@ namespace UI
             public GameObject Object;
         }
 
-        [Title("UI 对象注册表")]
+        [Header("UI 对象注册表")]
         [SerializeField]
         private List<UIWidgetData> _widgetList = new List<UIWidgetData>();
 
@@ -94,8 +93,7 @@ namespace UI
             return _widgets.GetValueOrDefault(id);
         }
 
-        [Button("自动绑定  Button_  Text_  Image_  Slider_  Toggle_  Input_  Panel_  Object_", ButtonSizes.Large), GUIColor(0, 1, 0)]
-        private void AutoBindByPrefix()
+        internal void AutoBindByPrefix()
         {
             _widgetList.Clear();
         

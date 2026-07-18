@@ -1,23 +1,38 @@
 using Architecture;
-using Sirenix.OdinInspector;
+#if UNITY_EDITOR
+using Architecture.Audio;
+using Cysharp.Threading.Tasks;
+using Tools;
 using VContainer;
+#endif
+using UnityEngine;
 
 namespace Test
 {
-    public class SoundTest : SerializedMonoBehaviour
+    /// <summary>
+    /// Editor-only manual diagnostic kept temporarily during the audio migration.
+    /// It is inert in Player builds and must not become part of runtime game flow.
+    /// </summary>
+    public sealed class SoundTest : MonoBehaviour
     {
-        [Inject] private IAudioService _audioService;
+#if UNITY_EDITOR
+        [Inject] private IMusicPlayer _musicPlayer;
+        [Inject] private ISfxPlayer _sfxPlayer;
 
-        [Button("播放测试BGM")]
+        [ContextMenu("播放测试BGM")]
         public void PlayTestBGM()
         {
-            _audioService.PlayBgmAsync("TestBGM");
+            _musicPlayer.PlayAsync(
+                new MusicCueId("TestBGM"),
+                MusicTransition.Default).ForgetLogged("[SoundTest] BGM boundary");
         }
         
-        [Button("播放测试SFX")]
+        [ContextMenu("播放测试SFX")]
         public void PlayTestSFX()
         {
-            _audioService.PlaySfxAsync("TestSFX");
+            _sfxPlayer.PlayAsync(new SfxCueId("TestSFX"))
+                .ForgetLogged("[SoundTest] SFX boundary");
         }
+#endif
     }
 }
