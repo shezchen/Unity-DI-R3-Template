@@ -2,7 +2,7 @@
 
 Unity 6 中小型独立游戏模板。项目以 VContainer 作为唯一组合根，以 UniTask 表达可取消的异步流程，以 R3 暴露状态变化，并通过 Addressables 管理 UI 与音频资源。
 
-当前编辑器版本：`6000.3.5f2`。
+当前编辑器版本：`6000.3.5f2`。模板产品名为 `DI-R3 Template`，接入具体游戏时应同步修改 Player Settings 中的公司名、产品名与平台标识符。
 
 ## 主要能力
 
@@ -45,9 +45,17 @@ var result = await navigator.PushAsync<SettingsPage>(
 播放音频：
 
 ```csharp
-await musicPlayer.PlayAsync(new MusicCueId(AudioClipName.BGM.TestBGM));
-await sfxPlayer.PlayAsync(new SfxCueId(AudioClipName.SFX.ClickSound));
+var music = await musicPlayer.PlayAsync(
+    new MusicCueId(musicCueId),
+    MusicTransition.Default,
+    cancellationToken);
+
+var sfx = await sfxPlayer.PlayAsync(
+    new SfxCueId(AudioClipName.SFX.ClickSound),
+    cancellationToken: cancellationToken);
 ```
+
+`musicCueId` 使用项目添加并生成后的 Music cue ID。
 
 修改设置：
 
@@ -88,6 +96,8 @@ Player Build 前会自动执行 UIBinder、Audio Catalog 与生成文件 freshne
 - URP 2D
 
 第一方运行时代码不依赖 Odin Inspector。当前第一方代码保持在 `Assembly-CSharp`；项目暂不引入模块 asmdef。
+
+项目不包含第一方单元测试、测试场景或手工测试组件；这是当前模板的明确范围，而不是待补齐项。
 
 ## Verification
 

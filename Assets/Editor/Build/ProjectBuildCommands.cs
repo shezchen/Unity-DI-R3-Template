@@ -29,6 +29,7 @@ namespace Template.Editor.Build
         [MenuItem("Tools/Template/Build/Windows Player")]
         public static void BuildWindowsPlayer()
         {
+            EnsureWindowsTarget();
             var scenes = EditorBuildSettings.scenes
                 .Where(scene => scene.enabled)
                 .Select(scene => scene.path)
@@ -65,8 +66,21 @@ namespace Template.Editor.Build
         [MenuItem("Tools/Template/Build/Packed Addressables + Windows Player")]
         public static void BuildPackedAddressablesAndWindowsPlayer()
         {
+            EnsureWindowsTarget();
             BuildPackedAddressables();
             BuildWindowsPlayer();
+        }
+
+        private static void EnsureWindowsTarget()
+        {
+            if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.StandaloneWindows64)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Windows build requires StandaloneWindows64 as the active Build Target. " +
+                "Switch it in Build Profiles, wait for Unity to finish importing, then run this command again.");
         }
     }
 }

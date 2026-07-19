@@ -6,7 +6,6 @@ using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using Generated;
 using R3;
-using Tools;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Utilities;
@@ -19,7 +18,7 @@ namespace UI
     /// 主界面 Page
     /// </summary>
     [RequireComponent(typeof(UIBinder), typeof(GraphicRaycaster))]
-    public class MainScenePage : MonoBehaviour, IBasePage
+    public sealed class MainScenePage : MonoBehaviour, IBasePage
     {
         [Header("按任意键")]
         [SerializeField]
@@ -58,12 +57,26 @@ namespace UI
             _uiBinder.Get<Button>("Button_Settings").OnClickAsObservable().Subscribe((_) =>
             {
                 _sfxPlayer.PlayAsync(new SfxCueId(AudioClipName.SFX.ClickSound))
-                    .ForgetLogged("[MainScenePage] Settings click SFX boundary");
-                OpenSettingsAsync().ForgetLogged("[MainScenePage] Open settings boundary");
+                    .Forget(exception =>
+                    {
+                        if (exception is not OperationCanceledException)
+                        {
+                            Debug.LogError(
+                                $"[MainScenePage] Settings click SFX boundary failed unexpectedly.\n{exception}");
+                        }
+                    });
+                OpenSettingsAsync().Forget(exception =>
+                {
+                    if (exception is not OperationCanceledException)
+                    {
+                        Debug.LogError(
+                            $"[MainScenePage] Open settings boundary failed unexpectedly.\n{exception}");
+                    }
+                });
             }).AddTo(this);
         }
 
-        #region IBasePage 实现
+        private void OnDestroy() => ReleaseTransientState();
 
         public async UniTask OnEnter(CancellationToken cancellationToken)
         {
@@ -75,11 +88,23 @@ namespace UI
             var pos = pressAnyButton.transform.localPosition;
             pressAnyButton.transform.localPosition -= (Vector3)slideOffset;
             canvasGroup.alpha = 0;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
 
             var seq = DOTween.Sequence().SetUpdate(true);
-            seq.Append(pressAnyButton.transform.LocalMoveTo(pos, slideDuration));
-            seq.Join(canvasGroup.FadeIn(slideDuration));
+            seq.Append(pressAnyButton.transform
+                .DOLocalMove(pos, slideDuration)
+                .SetTarget(pressAnyButton.transform)
+                .SetEase(Ease.OutQuad)
+                .SetUpdate(false));
+            seq.Join(canvasGroup
+                .DOFade(1f, slideDuration)
+                .SetTarget(canvasGroup)
+                .SetEase(Ease.Linear)
+                .SetUpdate(true));
             await AwaitTransitionAsync(seq, cancellationToken);
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
 
             // 等待任意按键
             _anyButtonSubscription?.Dispose();
@@ -87,42 +112,41 @@ namespace UI
             {
                 _anyButtonSubscription = null;
                 HandleAnyButtonAsync(this.GetCancellationTokenOnDestroy())
-                    .ForgetLogged("[MainScenePage] Any-button boundary");
+                    .Forget(exception =>
+                    {
+                        if (exception is not OperationCanceledException)
+                        {
+                            Debug.LogError(
+                                $"[MainScenePage] Any-button boundary failed unexpectedly.\n{exception}");
+                        }
+                    });
             });
         }
 
-        public async UniTask OnPause(CancellationToken cancellationToken)
+        public UniTask OnPause(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _anyButtonSubscription?.Dispose();
-            _anyButtonSubscription = null;
-            _transition?.Kill();
-            _transition = null;
+            ReleaseTransientState();
             if (_raycaster != null) _raycaster.enabled = false;
             gameObject.SetActive(false);
-            await UniTask.CompletedTask;
+            return UniTask.CompletedTask;
         }
 
-        public async UniTask OnResume(CancellationToken cancellationToken)
+        public UniTask OnResume(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             gameObject.SetActive(true);
             if (_raycaster != null) _raycaster.enabled = true;
             defaultSelectedButton.Select();
-            await UniTask.CompletedTask;
+            return UniTask.CompletedTask;
         }
 
-        public async UniTask OnExit(CancellationToken cancellationToken)
+        public UniTask OnExit(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _anyButtonSubscription?.Dispose();
-            _anyButtonSubscription = null;
-            _transition?.Kill();
-            _transition = null;
-            await UniTask.CompletedTask;
+            ReleaseTransientState();
+            return UniTask.CompletedTask;
         }
-
-        #endregion
 
         /// <summary>
         /// 按任意键之后，显示主页面的全部内容
@@ -132,14 +156,29 @@ namespace UI
             _sfxPlayer.PlayAsync(
                 new SfxCueId(AudioClipName.SFX.ClickSound),
                 cancellationToken: cancellationToken)
-                .ForgetLogged("[MainScenePage] Any-button SFX boundary");
+                .Forget(exception =>
+                {
+                    if (exception is not OperationCanceledException)
+                    {
+                        Debug.LogError(
+                            $"[MainScenePage] Any-button SFX boundary failed unexpectedly.\n{exception}");
+                    }
+                });
 
             var currentPos = pressAnyButton.transform.localPosition;
+            pressAnyButton.interactable = false;
+            pressAnyButton.blocksRaycasts = false;
             var hideSequence = DOTween.Sequence().SetUpdate(true);
-            hideSequence.Append(pressAnyButton.transform.LocalMoveTo(
-                currentPos + (Vector3)slideOffset,
-                slideDuration));
-            hideSequence.Join(pressAnyButton.FadeOut(slideDuration));
+            hideSequence.Append(pressAnyButton.transform
+                .DOLocalMove(currentPos + (Vector3)slideOffset, slideDuration)
+                .SetTarget(pressAnyButton.transform)
+                .SetEase(Ease.OutQuad)
+                .SetUpdate(false));
+            hideSequence.Join(pressAnyButton
+                .DOFade(0f, slideDuration)
+                .SetTarget(pressAnyButton)
+                .SetEase(Ease.Linear)
+                .SetUpdate(true));
             await AwaitTransitionAsync(hideSequence, cancellationToken);
 
             pressAnyButton.gameObject.SetActive(false);
@@ -150,9 +189,17 @@ namespace UI
         {
             mainSceneContent.gameObject.SetActive(true);
             mainSceneContent.alpha = 0;
+            mainSceneContent.interactable = false;
+            mainSceneContent.blocksRaycasts = false;
             await AwaitTransitionAsync(
-                mainSceneContent.FadeIn(mainSceneDuration),
+                mainSceneContent
+                    .DOFade(1f, mainSceneDuration)
+                    .SetTarget(mainSceneContent)
+                    .SetEase(Ease.Linear)
+                    .SetUpdate(true),
                 cancellationToken);
+            mainSceneContent.interactable = true;
+            mainSceneContent.blocksRaycasts = true;
             defaultSelectedButton.Select();
         }
 
@@ -182,6 +229,14 @@ namespace UI
                     _transition = null;
                 }
             }
+        }
+
+        private void ReleaseTransientState()
+        {
+            _anyButtonSubscription?.Dispose();
+            _anyButtonSubscription = null;
+            _transition?.Kill();
+            _transition = null;
         }
     }
 }

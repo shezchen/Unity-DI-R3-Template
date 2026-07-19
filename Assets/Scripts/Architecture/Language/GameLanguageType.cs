@@ -5,6 +5,8 @@ namespace Architecture
     [Serializable]
     public enum GameLanguageType
     {
-        Chinese,English,Japanese
+        Chinese,
+        English,
+        Japanese
     }
 }

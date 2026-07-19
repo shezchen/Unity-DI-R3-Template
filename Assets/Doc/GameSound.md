@@ -33,16 +33,14 @@ GameSound 将业务调用、Addressables 加载、播放状态和 Unity 输出�
 
 ```csharp
 using Architecture.Audio;
-using Generated;
-
 var music = await musicPlayer.PlayAsync(
-    new MusicCueId(AudioClipName.BGM.TestBGM),
+    new MusicCueId(musicCueId),
     MusicTransition.Default,
     cancellationToken);
 
 var sfx = await sfxPlayer.PlayAsync(
-    new SfxCueId(AudioClipName.SFX.ClickSound),
+    new SfxCueId(Generated.AudioClipName.SFX.ClickSound),
     cancellationToken: cancellationToken);
 ```
 
-页面或流程应根据 `AudioPlayResult` 处理失败；只有无法等待的 Unity 事件边界才使用 `.Forget()`。
+`musicCueId` 应来自项目新增并生成后的 Music cue。页面或流程应根据 `AudioPlayResult` 处理失败；只有无法等待的 Unity 事件边界才使用 UniTask 的 `.Forget(...)`，并在调用点显式处理异常。

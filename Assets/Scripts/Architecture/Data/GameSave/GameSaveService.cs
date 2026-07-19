@@ -22,7 +22,7 @@ namespace Architecture.Data.GameSave
 
         public GameSaveOperationResult NewGame(int slotIndex)
         {
-            var candidate = GameDataRuntime.NewGame() with { LastSavedAtUtc = _clock.UtcNow };
+            var candidate = new GameDataRuntime(LastSavedAtUtc: _clock.UtcNow);
             var result = _repository.Save(slotIndex, candidate);
             if (!result.IsSuccess)
             {
@@ -44,7 +44,7 @@ namespace Architecture.Data.GameSave
                     "Cannot save before creating or loading a game.");
             }
 
-            var candidate = Current with { LastSavedAtUtc = _clock.UtcNow };
+            var candidate = new GameDataRuntime(LastSavedAtUtc: _clock.UtcNow);
             var result = _repository.Save(slotIndex, candidate);
             if (!result.IsSuccess)
             {

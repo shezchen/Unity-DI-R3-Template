@@ -20,8 +20,8 @@ namespace Architecture.Data.GameSave
     [Serializable]
     internal sealed class GameSaveDocument
     {
-        public int? schemaVersion;
-        public DateTimeOffset? lastSavedAtUtc;
+        public int? SchemaVersion;
+        public DateTimeOffset? LastSavedAtUtc;
     }
 
     public sealed class JsonGameSaveRepository : IGameSaveRepository
@@ -37,7 +37,9 @@ namespace Architecture.Data.GameSave
             _paths = paths;
         }
 
-        public bool Exists(int slotIndex) => _fileStore.Exists(_paths.GetGameSavePath(slotIndex));
+        public bool Exists(int slotIndex) =>
+            _fileStore.Exists(_paths.GetGameSavePath(slotIndex)) ||
+            _fileStore.Exists(_paths.GetGameSaveBackupPath(slotIndex));
 
         public GameSaveLoadResult Load(int slotIndex)
         {
@@ -83,8 +85,8 @@ namespace Architecture.Data.GameSave
             {
                 var document = new GameSaveDocument
                 {
-                    schemaVersion = CurrentSchemaVersion,
-                    lastSavedAtUtc = game.LastSavedAtUtc
+                    SchemaVersion = CurrentSchemaVersion,
+                    LastSavedAtUtc = game.LastSavedAtUtc
                 };
                 var json = JsonConvert.SerializeObject(document, Formatting.Indented);
                 _fileStore.WriteAllTextAtomic(
@@ -109,7 +111,7 @@ namespace Architecture.Data.GameSave
             try
             {
                 var document = JsonConvert.DeserializeObject<GameSaveDocument>(_fileStore.ReadAllText(path));
-                if (document == null || document.schemaVersion != CurrentSchemaVersion || !document.lastSavedAtUtc.HasValue)
+                if (document == null || document.SchemaVersion != CurrentSchemaVersion || !document.LastSavedAtUtc.HasValue)
                 {
                     return new GameSaveLoadResult(
                         GameSaveOperationStatus.InvalidData,
@@ -120,7 +122,7 @@ namespace Architecture.Data.GameSave
 
                 return new GameSaveLoadResult(
                     GameSaveOperationStatus.Success,
-                    new GameDataRuntime(document.lastSavedAtUtc.Value));
+                    new GameDataRuntime(document.LastSavedAtUtc.Value));
             }
             catch (JsonException exception)
             {

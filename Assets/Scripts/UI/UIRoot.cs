@@ -2,7 +2,7 @@
 
 namespace UI
 {
-    public class UIRoot : MonoBehaviour
+    public sealed class UIRoot : MonoBehaviour
     {
         
     }

@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Architecture.Audio;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
-namespace Architecture
+namespace Architecture.Audio
 {
     [Serializable]
     public sealed class AudioClipReference : AssetReferenceT<AudioClip>
@@ -37,7 +36,7 @@ namespace Architecture
     /// Runtime-only mapping from typed cue IDs to Addressable AudioClip references.
     /// Authoring and code generation live in Assets/Editor/Audio.
     /// </summary>
-    [CreateAssetMenu(menuName = "16Party/Audio/Audio Catalog", fileName = "AudioCatalog")]
+    [CreateAssetMenu(menuName = "Template/Audio/Audio Catalog", fileName = "AudioCatalog")]
     public sealed class AudioCatalog : ScriptableObject
     {
         [SerializeField] private List<AudioCueDefinition> _music = new();
@@ -88,14 +87,15 @@ namespace Architecture
         {
             _musicIndex.Clear();
             _sfxIndex.Clear();
-            AddEntries(_music, _musicIndex, "Music");
-            AddEntries(_sfx, _sfxIndex, "SFX");
+            AddEntries(_music, _musicIndex, id => new MusicCueId(id), "Music");
+            AddEntries(_sfx, _sfxIndex, id => new SfxCueId(id), "SFX");
             _isIndexBuilt = true;
         }
 
         private static void AddEntries<TCueId>(
             IEnumerable<AudioCueDefinition> definitions,
             IDictionary<TCueId, AudioCueDefinition> index,
+            Func<string, TCueId> createId,
             string category)
         {
             foreach (var definition in definitions)
@@ -105,10 +105,7 @@ namespace Architecture
                     continue;
                 }
 
-                object boxedId = typeof(TCueId) == typeof(MusicCueId)
-                    ? new MusicCueId(definition.Id)
-                    : new SfxCueId(definition.Id);
-                var cueId = (TCueId)boxedId;
+                var cueId = createId(definition.Id);
 
                 if (index.ContainsKey(cueId))
                 {

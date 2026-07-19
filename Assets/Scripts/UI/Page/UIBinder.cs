@@ -4,10 +4,10 @@ using UnityEngine;
 
 namespace UI
 {
-    public class UIBinder : MonoBehaviour
+    public sealed class UIBinder : MonoBehaviour
     {
         [System.Serializable]
-        public class UIWidgetData
+        private sealed class UIWidgetData
         {
             public string ID;
             public GameObject Object;
@@ -15,13 +15,10 @@ namespace UI
 
         [Header("UI 对象注册表")]
         [SerializeField]
-        private List<UIWidgetData> _widgetList = new List<UIWidgetData>();
+        private List<UIWidgetData> _widgetList = new();
 
-        // 运行时字典，用于快速查找
         private Dictionary<string, GameObject> _widgets;
-        
-        // 定义前缀列表
-        private readonly string[] _validPrefixes = new string[] 
+        private static readonly string[] ValidPrefixes =
         { 
             "Button_",  // 按钮
             "Text_",  // 文本
@@ -42,10 +39,10 @@ namespace UI
         {
             if (_widgets != null) return;
 
-            _widgets = new Dictionary<string, GameObject>();
+            _widgets = new Dictionary<string, GameObject>(System.StringComparer.Ordinal);
             foreach (var data in _widgetList)
             {
-                if (string.IsNullOrEmpty(data.ID)) continue;
+                if (data == null || string.IsNullOrEmpty(data.ID)) continue;
                 
                 if (_widgets.ContainsKey(data.ID))
                 {
@@ -84,29 +81,20 @@ namespace UI
             return null;
         }
 
-        /// <summary>
-        /// 获取 GameObject 本身 (用于 SetActive 等)
-        /// </summary>
-        public GameObject Get(string id)
-        {
-            if (_widgets == null) InitializeDictionary();
-            return _widgets.GetValueOrDefault(id);
-        }
-
         internal void AutoBindByPrefix()
         {
             _widgetList.Clear();
         
-            // 获取所有子物体（包括隐藏的）
             var allTransforms = GetComponentsInChildren<Transform>(true);
 
             foreach (var t in allTransforms)
             {
-                if (t == transform) continue; // 跳过自己
+                if (t == transform) continue;
 
                 string name = t.name;
                 
-                bool isValid = _validPrefixes.Any(prefix => name.StartsWith(prefix));
+                bool isValid = ValidPrefixes.Any(prefix =>
+                    name.StartsWith(prefix, System.StringComparison.Ordinal));
 
                 if (isValid)
                 {

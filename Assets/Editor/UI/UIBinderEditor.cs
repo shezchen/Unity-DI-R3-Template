@@ -12,23 +12,15 @@ using UI;
 
 namespace Template.Editor.UIValidation
 {
-    internal enum BinderIssueSeverity
-    {
-        Warning,
-        Error
-    }
-
     internal sealed class BinderIssue
     {
-        public BinderIssue(UIBinder binder, BinderIssueSeverity severity, string message)
+        public BinderIssue(UIBinder binder, string message)
         {
             Binder = binder;
-            Severity = severity;
             Message = message;
         }
 
         public UIBinder Binder { get; }
-        public BinderIssueSeverity Severity { get; }
         public string Message { get; }
 
         public override string ToString() => $"{GetPath(Binder.transform)}: {Message}";
@@ -69,7 +61,6 @@ namespace Template.Editor.UIValidation
             {
                 issues.Add(new BinderIssue(
                     binder,
-                    BinderIssueSeverity.Error,
                     "Serialized field '_widgetList' was not found."));
                 return issues;
             }
@@ -84,20 +75,19 @@ namespace Template.Editor.UIValidation
 
                 if (string.IsNullOrWhiteSpace(id))
                 {
-                    issues.Add(new BinderIssue(binder, BinderIssueSeverity.Error, $"{label} has an empty ID."));
+                    issues.Add(new BinderIssue(binder, $"{label} has an empty ID."));
                     continue;
                 }
 
                 if (!ids.Add(id))
                 {
-                    issues.Add(new BinderIssue(binder, BinderIssueSeverity.Error, $"Duplicate ID '{id}'."));
+                    issues.Add(new BinderIssue(binder, $"Duplicate ID '{id}'."));
                 }
 
                 if (!ValidPrefixes.Any(prefix => id.StartsWith(prefix, StringComparison.Ordinal)))
                 {
                     issues.Add(new BinderIssue(
                         binder,
-                        BinderIssueSeverity.Error,
                         $"ID '{id}' does not use a supported prefix."));
                 }
 
@@ -105,7 +95,6 @@ namespace Template.Editor.UIValidation
                 {
                     issues.Add(new BinderIssue(
                         binder,
-                        BinderIssueSeverity.Error,
                         $"ID '{id}' has no GameObject reference."));
                     continue;
                 }
@@ -114,7 +103,6 @@ namespace Template.Editor.UIValidation
                 {
                     issues.Add(new BinderIssue(
                         binder,
-                        BinderIssueSeverity.Error,
                         $"ID '{id}' references an object outside this UIBinder hierarchy."));
                 }
 
@@ -122,7 +110,6 @@ namespace Template.Editor.UIValidation
                 {
                     issues.Add(new BinderIssue(
                         binder,
-                        BinderIssueSeverity.Error,
                         $"ID '{id}' no longer matches object name '{widget.name}'."));
                 }
 
@@ -130,7 +117,6 @@ namespace Template.Editor.UIValidation
                 {
                     issues.Add(new BinderIssue(
                         binder,
-                        BinderIssueSeverity.Error,
                         $"ID '{id}' requires component {requiredComponent}."));
                 }
             }
@@ -236,11 +222,7 @@ namespace Template.Editor.UIValidation
             {
                 foreach (var issue in issues)
                 {
-                    EditorGUILayout.HelpBox(
-                        issue.Message,
-                        issue.Severity == BinderIssueSeverity.Error
-                            ? MessageType.Error
-                            : MessageType.Warning);
+                    EditorGUILayout.HelpBox(issue.Message, MessageType.Error);
                 }
             }
 
@@ -261,14 +243,7 @@ namespace Template.Editor.UIValidation
             var issues = UIBinderValidator.ValidateProject(out var binderCount);
             foreach (var issue in issues)
             {
-                if (issue.Severity == BinderIssueSeverity.Error)
-                {
-                    Debug.LogError($"[UIBinderValidation] {issue}", issue.Binder);
-                }
-                else
-                {
-                    Debug.LogWarning($"[UIBinderValidation] {issue}", issue.Binder);
-                }
+                Debug.LogError($"[UIBinderValidation] {issue}", issue.Binder);
             }
 
             if (issues.Count == 0)
@@ -289,9 +264,7 @@ namespace Template.Editor.UIValidation
 
         public void OnPreprocessBuild(BuildReport report)
         {
-            var errors = UIBinderValidator.ValidateProject(out _)
-                .Where(issue => issue.Severity == BinderIssueSeverity.Error)
-                .ToList();
+            var errors = UIBinderValidator.ValidateProject(out _);
             if (errors.Count == 0)
             {
                 return;

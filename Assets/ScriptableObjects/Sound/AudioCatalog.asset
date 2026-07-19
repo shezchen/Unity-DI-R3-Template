@@ -12,27 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee1e604e9fc27414d9fd1f137a40675c, type: 3}
   m_Name: AudioCatalog
   m_EditorClassIdentifier: 
-  _music:
-  - _id: TestBGM
-    _clipReference:
-      m_AssetGUID: 0d03bd02aef738f4b8e05030dda97e93
-      m_SubObjectName: 
-      m_SubObjectType: 
-      m_SubObjectGUID: 
-      m_EditorAssetChanged: 0
-    _defaultGain: 1
+  _music: []
   _sfx:
   - _id: ClickSound
     _clipReference:
       m_AssetGUID: 3ebaefdb976a96840b85e5b90a36a1a5
-      m_SubObjectName: 
-      m_SubObjectType: 
-      m_SubObjectGUID: 
-      m_EditorAssetChanged: 0
-    _defaultGain: 1
-  - _id: TestSFX
-    _clipReference:
-      m_AssetGUID: c77e855de94bd99499a53b1883334ef6
       m_SubObjectName: 
       m_SubObjectType: 
       m_SubObjectGUID: 

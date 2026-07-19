@@ -1,11 +1,10 @@
 ﻿using DG.Tweening;
-using Tools;
 using UnityEngine;
 
 namespace UI
 {
     [RequireComponent(typeof(CanvasGroup))]
-    public class BreathableButtonIndicator : MonoBehaviour
+    public sealed class BreathableButtonIndicator : MonoBehaviour
     {
         [Header("Breath Settings")]
         [SerializeField]
@@ -45,27 +44,29 @@ namespace UI
 
         private void OnDisable()
         {
-            if (canBreathe)
-            {
-                StopBreathing();
-            }
+            StopBreathing();
         }
 
         private void StartBreathing()
         {
             if (_canvasGroup == null) return;
 
-            // Kill any existing tween to be safe
             StopBreathing();
 
-            _breathTween = _canvasGroup.Breath(
-                minAlpha, 
-                maxAlpha, 
-                duration, 
-                -1, // Infinite loops
-                easeType, 
-                independentUpdate
-            );
+            var clampedMinAlpha = Mathf.Clamp01(minAlpha);
+            var clampedMaxAlpha = Mathf.Clamp01(maxAlpha);
+            if (clampedMinAlpha > clampedMaxAlpha)
+            {
+                (clampedMinAlpha, clampedMaxAlpha) = (clampedMaxAlpha, clampedMinAlpha);
+            }
+
+            _canvasGroup.alpha = clampedMaxAlpha;
+            _breathTween = _canvasGroup
+                .DOFade(clampedMinAlpha, duration)
+                .SetTarget(_canvasGroup)
+                .SetEase(easeType)
+                .SetLoops(-1, LoopType.Yoyo)
+                .SetUpdate(independentUpdate);
         }
 
         private void StopBreathing()
@@ -76,7 +77,6 @@ namespace UI
                 _breathTween = null;
             }
             
-            // Reset alpha to max when disabled/stopped
             if (_canvasGroup != null)
             {
                 _canvasGroup.alpha = maxAlpha;

@@ -33,7 +33,6 @@ namespace Architecture.Audio.Internal
     internal interface IAudioOutput
     {
         bool IsMusicPlaying { get; }
-        AudioClip MusicClip { get; }
 
         void SetMusicTransitionGain(float gain);
         UniTask FadeMusicTransitionGainAsync(float gain, float duration, CancellationToken cancellationToken);
@@ -42,15 +41,9 @@ namespace Architecture.Audio.Internal
         void PlaySfx(AudioClip clip, float gain);
     }
 
-    internal interface IAudioImmediateControl
-    {
-        void StopAllImmediately();
-    }
-
     internal sealed class UnityAudioOutput :
         IAudioOutput,
         IAudioLevelsControl,
-        IAudioImmediateControl,
         IDisposable
     {
         private const float MinimumDecibels = -80f;
@@ -67,7 +60,6 @@ namespace Architecture.Audio.Internal
         private bool _isDisposed;
 
         public bool IsMusicPlaying => !_isDisposed && _musicSource != null && _musicSource.isPlaying;
-        public AudioClip MusicClip => _isDisposed || _musicSource == null ? null : _musicSource.clip;
 
         public UnityAudioOutput(AudioOutputConfiguration configuration)
         {
@@ -144,7 +136,7 @@ namespace Architecture.Audio.Internal
                 .SetUpdate(true);
 
             _musicFade = tween;
-            using var registration = cancellationToken.Register(() => tween.Kill(false));
+            await using var registration = cancellationToken.Register(() => tween.Kill(false));
 
             try
             {
@@ -192,7 +184,7 @@ namespace Architecture.Audio.Internal
             _sfxSource.PlayOneShot(clip, Mathf.Max(0f, gain));
         }
 
-        public void StopAllImmediately()
+        public void Dispose()
         {
             if (_isDisposed)
             {
@@ -201,16 +193,6 @@ namespace Architecture.Audio.Internal
 
             StopMusic();
             _sfxSource.Stop();
-        }
-
-        public void Dispose()
-        {
-            if (_isDisposed)
-            {
-                return;
-            }
-
-            StopAllImmediately();
             _isDisposed = true;
         }
 

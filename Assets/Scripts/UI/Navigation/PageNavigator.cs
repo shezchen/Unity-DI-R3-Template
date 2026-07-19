@@ -26,6 +26,11 @@ namespace UI
             string addressableKey,
             CancellationToken cancellationToken = default) where TPage : MonoBehaviour, IBasePage
         {
+            if (_isShuttingDown)
+            {
+                return ShuttingDown<TPage>();
+            }
+
             using var command = CreateCommandCancellation(cancellationToken);
             if (!await EnterGateAsync(command.Token))
             {
@@ -67,6 +72,11 @@ namespace UI
             string addressableKey,
             CancellationToken cancellationToken = default) where TPage : MonoBehaviour, IBasePage
         {
+            if (_isShuttingDown)
+            {
+                return ShuttingDown<TPage>();
+            }
+
             using var command = CreateCommandCancellation(cancellationToken);
             if (!await EnterGateAsync(command.Token))
             {
@@ -106,6 +116,13 @@ namespace UI
 
         public async UniTask<NavigationResult> PopAsync(CancellationToken cancellationToken = default)
         {
+            if (_isShuttingDown)
+            {
+                return NavigationResult.Failure(
+                    NavigationStatus.ShuttingDown,
+                    "Navigator is shutting down.");
+            }
+
             using var command = CreateCommandCancellation(cancellationToken);
             if (!await EnterGateAsync(command.Token))
             {
@@ -130,6 +147,13 @@ namespace UI
 
         public async UniTask<NavigationResult> ClearAsync(CancellationToken cancellationToken = default)
         {
+            if (_isShuttingDown)
+            {
+                return NavigationResult.Failure(
+                    NavigationStatus.ShuttingDown,
+                    "Navigator is shutting down.");
+            }
+
             using var command = CreateCommandCancellation(cancellationToken);
             if (!await EnterGateAsync(command.Token))
             {
@@ -160,6 +184,7 @@ namespace UI
             _isShuttingDown = true;
             _shutdown.Cancel();
             _stack.ClearImmediately();
+            _shutdown.Dispose();
         }
 
         private CancellationTokenSource CreateCommandCancellation(CancellationToken callerToken) =>

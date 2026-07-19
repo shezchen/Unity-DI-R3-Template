@@ -8,7 +8,6 @@ using DG.Tweening;
 using Generated;
 using R3;
 using TMPro;
-using Tools;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
@@ -46,6 +45,7 @@ namespace UI
 
         private void OnDestroy()
         {
+            _canvasGroup?.DOKill();
             foreach (var languageButton in _languageButtons)
             {
                 if (languageButton != null)
@@ -59,8 +59,7 @@ namespace UI
         {
             var button = _uiBinder.Get<Button>(id);
             button.OnClickAsObservable()
-                .Subscribe(_ => ApplyLanguageAndContinueAsync(language)
-                    .ForgetLogged("[LanguagePage] Language selection boundary"))
+                .Subscribe(_ => ApplyLanguageAndContinueAsync(language).Forget())
                 .AddTo(this);
 
             var languageButton = button.GetComponent<LanguageButton>();
@@ -81,10 +80,10 @@ namespace UI
             _isApplying = true;
             _raycaster.enabled = false;
             var previousLanguage = _language.CurrentLanguage;
+            var cancellationToken = this.GetCancellationTokenOnDestroy();
 
             try
             {
-                var cancellationToken = this.GetCancellationTokenOnDestroy();
                 var change = await _language.SetLanguageAsync(language, cancellationToken);
                 if (!change.IsSuccess)
                 {
@@ -111,9 +110,13 @@ namespace UI
                         $"[LanguagePage] Navigation failed: {navigation.Status}. {navigation.Error}");
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Page teardown owns this cancellation.
+            }
             catch (Exception exception)
             {
-                Debug.LogException(exception);
+                Debug.LogError($"[LanguagePage] Language selection failed unexpectedly.\n{exception}");
             }
             finally
             {
@@ -143,30 +146,55 @@ namespace UI
                 _raycaster.enabled = true;
             }
 
-            await _canvasGroup.FadeIn(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
+            await SetVisibleAsync(true, cancellationToken);
         }
 
         public async UniTask OnPause(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             _raycaster.enabled = false;
-            await UniTask.CompletedTask;
+            await SetVisibleAsync(false, cancellationToken);
         }
 
         public async UniTask OnResume(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            await SetVisibleAsync(true, cancellationToken);
             if (!_isApplying)
             {
                 _raycaster.enabled = true;
             }
-
-            await UniTask.CompletedTask;
         }
 
         public async UniTask OnExit(CancellationToken cancellationToken)
         {
-            await _canvasGroup.FadeOut(fadeDuration).ToUniTask(cancellationToken: cancellationToken);
+            _raycaster.enabled = false;
+            await SetVisibleAsync(false, cancellationToken);
+        }
+
+        private async UniTask SetVisibleAsync(bool visible, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var targetAlpha = visible ? 1f : 0f;
+            if (Mathf.Approximately(_canvasGroup.alpha, targetAlpha))
+            {
+                _canvasGroup.interactable = visible;
+                _canvasGroup.blocksRaycasts = visible;
+                return;
+            }
+
+            _canvasGroup.interactable = false;
+            _canvasGroup.blocksRaycasts = false;
+            var tween = _canvasGroup
+                .DOFade(targetAlpha, fadeDuration)
+                .SetTarget(_canvasGroup)
+                .SetEase(Ease.Linear)
+                .SetUpdate(true);
+            await tween.ToUniTask(cancellationToken: cancellationToken);
+
+            if (visible)
+            {
+                _canvasGroup.interactable = true;
+                _canvasGroup.blocksRaycasts = true;
+            }
         }
     }
 }

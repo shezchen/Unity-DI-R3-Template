@@ -1,9 +1,8 @@
 using System;
-using Architecture.Audio;
 using Architecture.Data.Settings;
 using R3;
 
-namespace Architecture
+namespace Architecture.Audio
 {
     /// <summary>
     /// Maps settings snapshots into AudioLevels without coupling Audio core to persistence.

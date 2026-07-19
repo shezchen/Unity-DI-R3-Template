@@ -15,11 +15,6 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_GUID: c3b4c01962444ee40a3e5555c7a0a28c
   m_SerializeEntries:
-  - m_GUID: 0d03bd02aef738f4b8e05030dda97e93
-    m_Address: Test BGM 001
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1d8cc6d45c8e03d499d7fdb0b6489b86
     m_Address: SettingsPagePrefab
     m_ReadOnly: 0
@@ -37,11 +32,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 58210ed9389ba714c934e3e3f13a9f7c
     m_Address: MainScenePrefab
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: c77e855de94bd99499a53b1883334ef6
-    m_Address: Test SFX 001
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

@@ -5,7 +5,11 @@ using UnityEngine.UI;
 namespace UI
 {
     [RequireComponent(typeof(Selectable))]
-    public class ButtonSelectionVisualizer : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler
+    public sealed class ButtonSelectionVisualizer : MonoBehaviour,
+        ISelectHandler,
+        IDeselectHandler,
+        IPointerEnterHandler,
+        IPointerExitHandler
     {
         [Tooltip("当按钮被选中时显示的物体")]
         [SerializeField] private GameObject selectionIndicator;
@@ -23,14 +27,14 @@ namespace UI
                 return;
             }
 
-            if (hideOnAwake && selectionIndicator != null)
+            if (hideOnAwake)
             {
                 selectionIndicator.SetActive(false);
             }
 
             if (selectOnAwake)
             {
-                EventSystem.current.SetSelectedGameObject(gameObject);
+                EventSystem.current?.SetSelectedGameObject(gameObject);
             }
         }
         
@@ -52,14 +56,18 @@ namespace UI
         
         public void OnPointerEnter(PointerEventData eventData)
         {
-            EventSystem.current.SetSelectedGameObject(gameObject);
+            EventSystem.current?.SetSelectedGameObject(gameObject);
             if (selectionIndicator != null) selectionIndicator.SetActive(true);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (selectionIndicator != null) selectionIndicator.SetActive(false);
+            if (selectionIndicator != null)
+            {
+                selectionIndicator.SetActive(
+                    EventSystem.current != null &&
+                    EventSystem.current.currentSelectedGameObject == gameObject);
+            }
         }
-        
     }
 }

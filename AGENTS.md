@@ -58,6 +58,7 @@
 
 - `IPageNavigator` 串行化 Push/Pop/Replace/Clear；`IUiPrefabProvider` 加载 Addressables，`PageStack` 管理页面实例、生命周期和资源 lease。
 - 新页面实现带 `CancellationToken` 的 `IBasePage` 生命周期。被覆盖时禁用交互，恢复时刷新可能过期的数据，退出完成后由页面 lease 销毁实例并释放句柄。
+- Replace 为保留失败回滚，会等待旧页 `OnPause` 后进入新页，成功后才对旧页执行 `OnExit`；不允许与替换页叠加显示时，旧页必须在 `OnPause` 完成隐藏，并在 `OnResume` 恢复。
 - 需要注入的页面必须经 `IPageNavigator` 创建，禁止改回 `Object.Instantiate`；页面只依赖导航接口，不依赖 concrete navigator。
 - Push 同类型同 key 页面返回 `AlreadyCurrent`；所有转场经过 async gate 排队，加载或 OnEnter 失败必须恢复旧页面。
 - 页面 Prefab 保持 `UIBinder` 和需要的 `CanvasGroup`/`GraphicRaycaster` 组件。自动绑定对象按 `Button_`、`Text_`、`Image_`、`Slider_`、`Toggle_`、`Input_`、`Panel_`、`Object_` 前缀命名，ID 在同一页面内唯一。
@@ -76,9 +77,8 @@
 - Locale 代码集中维护，当前为 `en`、`zh-Hans`、`ja`；扩展语言时同时更新 enum、Localization Settings/表、选择 UI 和字体资源。
 - `SettingsSnapshot` 包含语言字段；启动时先恢复保存的 Locale，并依据 `IsFirstLaunch` 在 `LanguagePage` 与 `MainScenePage` 之间分流。
 
-### `Assets/Scripts/Tools`、`Assets/Editor`、`Assets/Scripts/Generated`
+### `Assets/Editor`、`Assets/Scripts/Generated`
 
-- `Tools` 只保留有真实调用方的通用扩展，不反向依赖具体页面或游戏业务。
 - UnityEditor API 只能放在 `Assets/Editor`，或完整包在 `#if UNITY_EDITOR` 内，避免 Player 构建引用编辑器程序集。
 - `AddressableKeys.cs` 由 `Tools/Template/Code Generation/Generate Addressable Keys` 生成；`AudioClipName.cs` 由 `AudioCatalog` Inspector 的 `Auto Generate Index` 生成。不要手工编辑生成文件，应修改来源后重新生成。
 - 两套生成器共享标识符清洗、关键字、碰撞、转义和稳定排序规则；Player Build 前置门禁会拒绝过期生成文件。
@@ -109,13 +109,12 @@
 3. 禁止由 Codex 或 Unity MCP 进入、暂停或退出 Play Mode，也不通过 MCP 触发运行时流程；Play Mode 与实际游玩验证全部由用户执行。Unity MCP 仅用于 Edit Mode 下的只读状态、Console、资源和 Inspector 检查，除非用户另行明确授权。
 4. 数据改动验证默认创建、保存、加载、损坏文件回退，以及 Runtime/Save 往返一致性。
 5. UI/流程改动在 `SampleScene` 实际走一遍 Push、Pause、Pop、Resume，并观察注入、交互开关和动画结束状态。
-6. Addressables/音频/本地化改动验证真实资源加载；涉及 Player 行为时再做对应平台构建。仓库当前没有正式的第一方测试程序集，新增可测试逻辑时优先补 EditMode 测试，而不是只靠手动验证。
+6. Addressables/音频/本地化改动验证真实资源加载；涉及 Player 行为时再做对应平台构建。
 
-当前重构阶段不新增或补写单元测试，也不为测试引入 asmdef；继续使用 Unity 编译、Editor 验证菜单和用户手动 Play Mode 形成验证闭环，直到用户明确恢复测试工作。
+项目当前不保留第一方单元测试、测试程序集、手工测试组件或测试场景，也不为测试引入 asmdef。验证依靠 Unity 编译、Editor 作者门禁、Addressables/Player 构建和用户手动 Play Mode；除非用户之后明确改变该决策，不新增测试代码。
 
 交付时说明修改文件、验证信号和仍未验证的边界。不要把“代码看起来能编译”表述成已通过 Unity 或 Player 验证。
 
 ## 当前已知边界
 
 - Scope 释放时 `PageNavigator` 采用同步快速退出：取消排队命令，跳过页面退出动画，并按页面实例后资源 lease 的顺序清理。
-- `SoundTest` 仍是 SampleScene 中的临时手工诊断夹具，最终交付前必须从场景移除。

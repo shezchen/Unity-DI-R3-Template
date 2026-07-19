@@ -20,11 +20,12 @@ namespace Architecture.Data.Settings
         public SettingsSnapshot Current { get; private set; }
         public Observable<SettingsSnapshot> Changes => _changes;
 
-        public async UniTask<SettingsInitializationResult> InitializeAsync()
+        public UniTask<SettingsInitializationResult> InitializeAsync()
         {
             if (IsInitialized)
             {
-                return new SettingsInitializationResult(SettingsInitializationStatus.Loaded);
+                return UniTask.FromResult(
+                    new SettingsInitializationResult(SettingsInitializationStatus.Loaded));
             }
 
             var load = _repository.Load();
@@ -43,11 +44,10 @@ namespace Architecture.Data.Settings
                     }
                 }
 
-                await UniTask.CompletedTask;
-                return new SettingsInitializationResult(
+                return UniTask.FromResult(new SettingsInitializationResult(
                     load.Status == SettingsLoadStatus.Loaded
                         ? SettingsInitializationStatus.Loaded
-                        : SettingsInitializationStatus.RecoveredFromBackup);
+                        : SettingsInitializationStatus.RecoveredFromBackup));
             }
 
             Current = SettingsSnapshot.Default;
@@ -58,8 +58,9 @@ namespace Architecture.Data.Settings
             if (!save.IsSuccess)
             {
                 Debug.LogError($"[Settings] Failed to persist defaults: {save.Error}");
-                await UniTask.CompletedTask;
-                return new SettingsInitializationResult(SettingsInitializationStatus.PersistenceFailed, save.Error);
+                return UniTask.FromResult(new SettingsInitializationResult(
+                    SettingsInitializationStatus.PersistenceFailed,
+                    save.Error));
             }
 
             if (load.Status is SettingsLoadStatus.Invalid or SettingsLoadStatus.Failed)
@@ -67,8 +68,8 @@ namespace Architecture.Data.Settings
                 Debug.LogWarning($"[Settings] Existing settings rejected; defaults created. {load.Error}");
             }
 
-            await UniTask.CompletedTask;
-            return new SettingsInitializationResult(SettingsInitializationStatus.CreatedDefaults);
+            return UniTask.FromResult(
+                new SettingsInitializationResult(SettingsInitializationStatus.CreatedDefaults));
         }
 
         public SettingsUpdateResult SetMusicVolume(int volume) =>

@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
+using Architecture.Audio;
 using Architecture.Data.Settings;
 using Cysharp.Threading.Tasks;
 using Generated;
-using Tools;
 using UI;
 using UnityEngine;
 using VContainer;
@@ -22,7 +22,7 @@ namespace Architecture
         private void Start()
         {
             RunStartupAsync(this.GetCancellationTokenOnDestroy())
-                .ForgetLogged("[GameFlow] Startup boundary");
+                .Forget();
         }
 
         private async UniTask RunStartupAsync(CancellationToken cancellationToken)

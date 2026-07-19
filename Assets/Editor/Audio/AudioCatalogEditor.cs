@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Architecture;
+using Architecture.Audio;
 using Template.Editor.CodeGeneration;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
@@ -90,6 +90,12 @@ namespace Template.Editor.Audio
 
         internal static bool Validate(AudioCatalog catalog, bool logSuccess)
         {
+            if (catalog == null)
+            {
+                Debug.LogError("[AudioCatalog] Catalog asset is missing.");
+                return false;
+            }
+
             var settings = AddressableAssetSettingsDefaultObject.Settings;
             if (settings == null)
             {
@@ -231,6 +237,13 @@ namespace Template.Editor.Audio
                     isValid = false;
                 }
 
+                if (entry.DefaultGain < 0f)
+                {
+                    Debug.LogError(
+                        $"[AudioCatalog] {category} cue '{entry.Id}' has a negative default gain.");
+                    isValid = false;
+                }
+
                 GeneratedCodeUtility.TryCreateConstants(
                     new[] { entry.Id }, category, out var generatedConstant, out _);
                 var generatedName = generatedConstant[0].Identifier;
@@ -271,6 +284,13 @@ namespace Template.Editor.Audio
             AudioCatalog catalog,
             AddressableAssetSettings settings)
         {
+            if (!AssetDatabase.IsValidFolder(BgmFolder) || !AssetDatabase.IsValidFolder(SfxFolder))
+            {
+                Debug.LogError(
+                    $"[AudioCatalog] Source folders must exist: '{BgmFolder}' and '{SfxFolder}'.");
+                return false;
+            }
+
             var expectedMusic = ScanFolder(BgmFolder, settings, catalog.Music);
             var expectedSfx = ScanFolder(SfxFolder, settings, catalog.Sfx);
             var isValid = true;
